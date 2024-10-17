@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: ${DOCKERFILE}
     container_name: ${DOCKER_CONTAINER}
+    restart: always
     environment:
       - PORT=${IN_PORT}
     ports:

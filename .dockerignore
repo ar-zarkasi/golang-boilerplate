@@ -5,3 +5,5 @@ Dockerfile*
 _DS_Store
 README*
 build
+runner.conf
+gin-bin
