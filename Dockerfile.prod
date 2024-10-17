@@ -1,0 +1,26 @@
+FROM golang:1.23.2
+
+RUN apt-get update
+RUN apt-get install sudo
+
+# env system
+ENV GOPATH /go
+ENV PATH $GOPATH/bin:$PATH
+
+# set local time
+RUN ln -sf /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
+RUN echo "Asia/Jakarta" > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata
+
+ENV TZ=Asia/Jakarta
+
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN mkdir -p /go/src/app
+
+# set working dir
+WORKDIR /go/src/app
+
+COPY . .
+RUN go mod tidy
+RUN go build /go/src/app/main.go
+
+CMD ["/go/src/app/main"]

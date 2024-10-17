@@ -1,0 +1,17 @@
+services:
+  application:
+    image: ${DOCKER_IMAGE}
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE}
+    container_name: ${DOCKER_CONTAINER}
+    environment:
+      - PORT=${IN_PORT}
+    ports:
+      - ${OUT_PORT}:${IN_PORT}
+    volumes:
+      - ./:/go/src/app
+networks:
+  default:
+    name: "${NETWORK_NAME}"
+    driver: bridge
