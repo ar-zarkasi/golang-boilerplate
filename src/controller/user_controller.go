@@ -54,3 +54,43 @@ func (controller *UserController) GetUsers(ctx *gin.Context) {
 
 	utils.Send(ctx, constant.Success, "Users retrieved successfully", users)
 }
+
+func (controller *UserController) UpdateUser(ctx *gin.Context) {
+	id := ctx.Param("id")
+	_, err := controller.UserService.GetUserById(id)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+	}
+
+	req := request.UpdateUserRequest{}
+	ctx.ShouldBind(&req)
+	err = controller.Validate.Struct(req)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.ValidationError, err.Error())
+		return
+	}
+
+	err = controller.UserService.UpdateUser(id, req)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+		return
+	}
+
+	utils.Send(ctx, constant.Success, "User retrieved successfully")
+}
+
+func (controller *UserController) DeleteUser(ctx *gin.Context) {
+	id := ctx.Param("id")
+	_, err := controller.UserService.GetUserById(id)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+	}
+
+	err = controller.UserService.DeleteUser(id)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+		return
+	}
+
+	utils.Send(ctx, constant.Success, "User retrieved successfully")
+}

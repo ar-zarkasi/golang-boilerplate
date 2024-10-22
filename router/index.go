@@ -40,6 +40,8 @@ func userRouter(router *gin.RouterGroup, validator *validator.Validate,UserServi
 	user_route := router.Group("/users")
 		user_route.GET("", controller.GetUsers)
 		user_route.POST("", controller.CreateUser)
+		user_route.PUT("/:id", controller.UpdateUser)
+		user_route.DELETE("/:id", controller.DeleteUser)
 	return
 }
 

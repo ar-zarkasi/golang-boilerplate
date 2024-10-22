@@ -15,4 +15,5 @@ const (
 	GatewayTimeout = 504
 	ServiceUnavailable = 503
 	ServiceBroken = 502
+	WrongCredential = 1001
 )

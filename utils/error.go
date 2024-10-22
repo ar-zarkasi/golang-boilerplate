@@ -27,6 +27,7 @@ func ErrorMessage(code int) string {
 		constant.ServiceUnavailable:   "Service Unavailable",
 		constant.GatewayTimeout:       "Gateway Timeout",
 		constant.ServiceBroken:        "Service Not Completed",
+		constant.WrongCredential:      "Username or Password is incorrect",
 	}
 	return errorMessages[code]
 }
