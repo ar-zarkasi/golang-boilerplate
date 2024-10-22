@@ -1,17 +1,35 @@
 services:
-  application:
+  dev:
     image: ${DOCKER_IMAGE}
     build:
       context: .
-      dockerfile: ${DOCKERFILE}
+      dockerfile: Dockerfile.dev
     container_name: ${DOCKER_CONTAINER}
     restart: always
     environment:
       - PORT=${IN_PORT}
+    env_file:
+      - .env
     ports:
       - ${OUT_PORT}:${IN_PORT}
     volumes:
       - ./:/go/src/app
+  prod:
+    image: ${DOCKER_IMAGE}
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ${DOCKER_CONTAINER}
+    restart: always
+    environment:
+      - PORT=${IN_PORT}
+      - GIN_MODE=release
+    env_file:
+      - .env
+    ports:
+      - ${OUT_PORT}:${IN_PORT}
+    volumes:
+      - ${LOG_PATH}/:/go/src/app/logs
 networks:
   default:
     name: "${NETWORK_NAME}"

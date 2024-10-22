@@ -3,8 +3,15 @@ THIS IS BOILERPLATE Golang Project
 Golang 1.23.2
 \*\* Debian Based
 
+### Requirement
+
+- Docker Desktop (Windows), Docker (Linux)
+
 Using it when init First Golang Project
 
 - copy .env.example to .env
-- For Development using Dockerfile.dev
-- For Production using Dockerfile.prod
+- fill .env file with your configuration
+- deploy using:
+  -- execute deploy.bat when you using windows
+  -- execute deploy.sh when you using linux system
+- when running deploy, you choose to deploy for production or development

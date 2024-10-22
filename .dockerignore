@@ -7,3 +7,7 @@ README*
 build
 runner.conf
 gin-bin
+logs/*
+deploy.bat
+deploy.sh
+deploy_redhat.sh
