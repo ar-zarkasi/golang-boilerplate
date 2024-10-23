@@ -47,11 +47,11 @@ func (t *RoleRepository) FindAllRole() ([]models.Role, error) {
 	return roles, result.Error
 }
 
-func (t *RoleRepository) FindRoleById(id uint8) (models.Role, error) {
+func (t *RoleRepository) FindRoleById(id uint8) (*models.Role, error) {
 	var role models.Role
 	db := t.loadEager(t.Db)
 	result := db.First(&role, id)
-	return role, result.Error
+	return &role, result.Error
 }
 
 func (t *RoleRepository) FindRole(filter map[string]interface{}) ([]models.Role, error) {
@@ -89,9 +89,8 @@ func (t *RoleRepository) DeleteRole(id uint8) error {
 	return result.Error
 }
 
-func (t *RoleRepository) AdminRole() (models.Role, error) {
+func (t *RoleRepository) AdminRole() (role *models.Role, err error) {
 	var (
-		role models.Role
 		adminId = 1 //preserved for admin role
 	)
 	db := t.loadEager(t.Db)

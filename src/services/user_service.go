@@ -88,7 +88,7 @@ func (t *UserService) createToken(userId string) (*response.TokenGenerated, erro
 
 func (srv *UserService) CreateFirstUser() (err error) {
 
-	var firstRole models.Role
+	var firstRole *models.Role
 	firstRole, err = srv.Role.AdminRole()
 	if err != nil {
 		utils.ErrorFatal(err)

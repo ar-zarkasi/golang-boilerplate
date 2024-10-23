@@ -41,24 +41,22 @@ func (t *RoleService) parsingModelToResponse(roles interface{}) interface{} {
 
 func (t *RoleService) CreateAdminRole() (int, error) {
 	var (
-		role models.Role
+		role *models.Role
 		IdAdmin = 1
 	)
 	role, err := t.RoleRepository.AdminRole()
+	fmt.Println("Search Role", role)
 	if err == nil {
 		IdAdmin = int(role.Id)
 		return IdAdmin, nil
 	}
-	fmt.Println("Admin Role Not Found")
-	
 	// If Not Exists
-	r, err := t.RoleRepository.CreateRole("Administrator")
+	role, err = t.RoleRepository.CreateRole("Administrator")
+	fmt.Println("Buat Role", role)
 	if err == nil {
 		IdAdmin = int(role.Id)
 		return IdAdmin, nil
 	}
-
-	fmt.Println("Admin Role Not Created", r)
 
 	return 0, err
 }
@@ -78,7 +76,7 @@ func (t *RoleService) GetRoleById(id int) *models.Role {
 	if err != nil {
 		return nil
 	}
-	return &role
+	return role
 }
 
 func (t *RoleService) AddRole(name string) (*int, error) {

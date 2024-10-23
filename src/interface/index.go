@@ -10,13 +10,12 @@ import (
 
 type RoleInterface interface {
 	FindAllRole() ([]models.Role, error)
-	FindRoleById(id uint8) (role models.Role, err error)
+	FindRoleById(id uint8) (role *models.Role, err error)
 	FindRole(filter map[string]interface{}) (user []models.Role, err error)
-	// CreateRole(user models.Role) error
 	CreateRole(name string) (*models.Role, error)
 	UpdateRole(user models.Role) error
 	DeleteRole(id uint8) error
-	AdminRole() (role models.Role, err error)
+	AdminRole() (role *models.Role, err error)
 }
 
 type UserInterface interface {
