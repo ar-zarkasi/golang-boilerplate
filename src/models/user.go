@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -15,10 +16,10 @@ type User struct {
     Password  string  `gorm:"type:varchar(255)" json:"password"`
 	RoleId	  uint8   `json:"role_id"`
 	RefreshToken sql.NullString `gorm:"type:varchar(255);nullable;" json:"refresh_token"`
-	RefreshTokenExpiredAt *uint32 `json:"refresh_token_expired_at"`
-	CreatedAt uint32  `gorm:"autoCreateTime:nano" json:"created_at"`
-	UpdatedAt uint32  `gorm:"autoCreateTime:nano;autoUpdateTime:nano" json:"updated_at"`
-	DeletedAt *uint32 `gorm:"null" json:"deleted_at"`
+	RefreshTokenExpiredAt sql.NullTime `json:"refresh_token_expired_at"`
+	CreatedAt time.Time  `gorm:"autoCreateTime:nano" json:"created_at"`
+	UpdatedAt time.Time  `gorm:"autoCreateTime:nano;autoUpdateTime:nano" json:"updated_at"`
+	DeletedAt sql.NullTime `json:"deleted_at"`
 	
 	Role Role `gorm:"foreignKey:RoleId;references:Id" json:"role"`
 	Login []Authentication `gorm:"foreignKey:UserId;references:Id" json:"login"`

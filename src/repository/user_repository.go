@@ -2,6 +2,7 @@ package repository
 
 import (
 	interfaces "app/src/interface"
+	"app/src/middleware"
 	"app/src/models"
 	helper "app/utils"
 
@@ -11,31 +12,54 @@ import (
 
 type UserRepository struct {
 	Db *gorm.DB
+	with []string
 }
 
 func NewUser(db *gorm.DB) (interfaces.UserInterface) {
-	return &UserRepository{Db: db}
+	return &UserRepository{Db: db, with: []string{"Role", "Login"}}
+}
+
+func (t *UserRepository) loadEager() *gorm.DB {
+	db := t.Db
+	for _, v := range t.with {
+		db = db.Preload(v)
+	}
+	return db
+}
+
+func (t *UserRepository) notAdmin(db *gorm.DB) {
+	// if Accessing user is not admin, filter out admin role
+	activeUser := middleware.GetUserActive()
+	adminId := uint8(1)
+	if activeUser == nil || activeUser.Role.Id != adminId {
+		db = db.Where("role_id <> ?", adminId)
+	}
 }
 
 func (t *UserRepository) FindAllUser() ([]models.User, error) {
 	var users []models.User
-	result := t.Db.Where("deleted_at IS NULL").Order("created_at ASC").Find(&users)
+	db := t.loadEager()
+	t.notAdmin(db)
+	result := db.Where("deleted_at IS NULL").Order("created_at ASC").Find(&users)
 	return users, result.Error
 }
 
 func (t *UserRepository) FindUserById(id uuid.UUID) (models.User, error) {
 	var user models.User
-	result := t.Db.First(&user, "id = ?", id)
+	db := t.loadEager()
+	result := db.First(&user, "id = ?", id)
 	return user, result.Error
 }
 
 func (t *UserRepository) FindUser(filter map[string]interface{}) ([]models.User, error) {
 	var users []models.User
-	tempdb := t.Db
+	tempdb := t.loadEager()
 	likeColumn := []string{"name", "email", "phone"}
 	for key, value := range filter {
 		if helper.ContainString(likeColumn, key) {
-			tempdb.Where(key+" LIKE %?%", value)
+			if strValue, ok := value.(string); ok {
+				tempdb.Where(key+" LIKE ?", "%"+strValue+"%")
+			}
 			continue
 		}
 		tempdb.Where(key, value)
@@ -55,6 +79,10 @@ func (t *UserRepository) UpdateUser(user models.User) error {
 }
 
 func (t *UserRepository) DeleteUser(id uuid.UUID) error {
-	result := t.Db.Delete(&models.User{}, "id = ?", id)
+	model, err := t.FindUserById(id)
+	if err != nil {
+		return err
+	}
+	result := t.Db.Delete(&model)
 	return result.Error
 }

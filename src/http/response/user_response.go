@@ -18,6 +18,7 @@ type LoginResponse struct {
 	Name string `json:"name"`
 	Email string `json:"email"`
 	Phone string `json:"phone"`
+	RoleId int `json:"role_id"`
 	Role string `json:"role"`
 	Token string `json:"token"`
 	ExpiredToken string `json:"expired_token"`

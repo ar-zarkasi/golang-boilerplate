@@ -34,16 +34,17 @@ func (controller *UserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
-	id_new, err := controller.UserService.AddUser(req)
+	id_new, code, err := controller.UserService.AddUser(req)
 	if err != nil {
-		utils.ErrorResponse(ctx, constant.BadRequest, err.Error())
+		utils.ErrorResponse(ctx, code, err.Error())
+		return
 	}
 
 	resp := response.CreateUserResponse{
 		ID: *id_new,
 	}
 
-	utils.Send(ctx, constant.SuccessCreate, "User created successfully", resp)
+	utils.Send(ctx, code, "User created successfully", resp)
 }
 
 func (controller *UserController) GetUsers(ctx *gin.Context) {
@@ -70,27 +71,55 @@ func (controller *UserController) UpdateUser(ctx *gin.Context) {
 		return
 	}
 
-	err = controller.UserService.UpdateUser(id, req)
+	code, err := controller.UserService.UpdateUser(id, req)
 	if err != nil {
-		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+		utils.ErrorResponse(ctx, code, err.Error())
 		return
 	}
 
-	utils.Send(ctx, constant.Success, "User retrieved successfully")
+	utils.Send(ctx, code, "User retrieved successfully")
 }
 
 func (controller *UserController) DeleteUser(ctx *gin.Context) {
 	id := ctx.Param("id")
 	_, err := controller.UserService.GetUserById(id)
 	if err != nil {
-		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+		utils.ErrorResponse(ctx, constant.NotFound, err.Error())
 	}
 
-	err = controller.UserService.DeleteUser(id)
+	code, err := controller.UserService.DeleteUser(id)
 	if err != nil {
-		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+		utils.ErrorResponse(ctx, code, err.Error())
 		return
 	}
 
-	utils.Send(ctx, constant.Success, "User retrieved successfully")
+	utils.Send(ctx, code, "User Deleted successfully")
+}
+
+func (controller *UserController) GetUserById(ctx *gin.Context) {
+	id := ctx.Param("id")
+	user, err := controller.UserService.GetUserById(id)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.InternalServerError, err.Error())
+	}
+
+	utils.Send(ctx, constant.Success, "User retrieved successfully", user)
+}
+
+func (controller *UserController) Login(ctx *gin.Context) {
+	req := request.LoginRequest{}
+	ctx.ShouldBind(&req)
+	valid := controller.Validate.Struct(req)
+	if valid != nil {
+		utils.ErrorResponse(ctx, constant.ValidationError, valid.Error())
+		return
+	}
+	metadata := req.Metadata
+	login, code, err := controller.UserService.Login(req, metadata)
+	if err != nil {
+		utils.ErrorResponse(ctx, code, err.Error())
+		return
+	}
+
+	utils.Send(ctx, code, "Login successfully", login)
 }

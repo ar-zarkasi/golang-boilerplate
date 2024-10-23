@@ -14,6 +14,7 @@ func ErrorFatal(err error) {
 
 func ErrorResponse(context *gin.Context, code int, message string) {
 	Send(context, code, message)
+	context.Abort()
 }
 
 func ErrorMessage(code int) string {
