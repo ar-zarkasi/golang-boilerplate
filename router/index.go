@@ -7,6 +7,7 @@ import (
 	"app/src/repository"
 	"app/src/services"
 	"app/utils"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -69,9 +70,10 @@ func roleRouter(router *gin.RouterGroup, validator *validator.Validate,Service s
 	controller := controller.NewRoleController(Service, validator)
 	role_route := router.Group("/roles")
 		role_route.GET("", controller.GetAllRole)
-		sub_role_route := role_route.Group("", *middleware[0])
-			sub_role_route.POST("", controller.CreateRole, *middleware[1])
-		role_route.PUT("/:id", controller.UpdateRole)
+		fmt.Println("Middleware", middleware[1])
+		sub_role_admin := role_route.Group("", *middleware[0], *middleware[1])
+			sub_role_admin.POST("", controller.CreateRole)
+			sub_role_admin.PUT("/:id", controller.UpdateRole)
 	return
 }
 

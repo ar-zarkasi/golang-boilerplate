@@ -5,7 +5,6 @@ import (
 	interfaces "app/src/interface"
 	"app/src/models"
 	"errors"
-	"fmt"
 )
 
 type RoleService struct {
@@ -45,14 +44,12 @@ func (t *RoleService) CreateAdminRole() (int, error) {
 		IdAdmin = 1
 	)
 	role, err := t.RoleRepository.AdminRole()
-	fmt.Println("Search Role", role)
 	if err == nil {
 		IdAdmin = int(role.Id)
 		return IdAdmin, nil
 	}
 	// If Not Exists
 	role, err = t.RoleRepository.CreateRole("Administrator")
-	fmt.Println("Buat Role", role)
 	if err == nil {
 		IdAdmin = int(role.Id)
 		return IdAdmin, nil
