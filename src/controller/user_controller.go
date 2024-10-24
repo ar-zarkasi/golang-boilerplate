@@ -34,6 +34,12 @@ func (controller *UserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
+	req.Password, err = utils.HashPassword(req.Password)
+	if err != nil {
+		utils.ErrorResponse(ctx, constant.ServiceBroken, err.Error())
+		return
+	}
+
 	id_new, code, err := controller.UserService.AddUser(req)
 	if err != nil {
 		utils.ErrorResponse(ctx, code, err.Error())

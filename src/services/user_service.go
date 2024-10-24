@@ -39,33 +39,15 @@ func NewUserService(UserRepository interfaces.UserInterface, RoleRepository inte
 	}, nil
 }
 
-func (t *UserService) parsingModelToResponse(users interface{}) interface{} {
-    switch v := users.(type) {
-		case models.User:
-			return &response.ListUserResponse{
-				Id:       v.Id.String(),
-				Name:     v.Name,
-				Email:    v.Email,
-				Phone:    v.Phone,
-				Role:     v.Role.Name,
-				UpdateAt: v.UpdatedAt.Format(constant.FORMAT_DATETIME),
-			}
-		case []models.User:
-			var responses []response.ListUserResponse
-			for _, user := range v {
-				responses = append(responses, *&response.ListUserResponse{
-					Id:       user.Id.String(),
-					Name:     user.Name,
-					Email:    user.Email,
-					Phone:    user.Phone,
-					Role:     user.Role.Name,
-					UpdateAt: user.UpdatedAt.Format(constant.FORMAT_DATETIME),
-				})
-			}
-			return responses
-		default:
-			return nil
-    }
+func (t *UserService) parsingModelToResponse(users models.User) *response.ListUserResponse {
+    return &response.ListUserResponse{
+		Id: users.Id.String(),
+		Name: users.Name,
+		Email: users.Email,
+		Phone: users.Phone,
+		Role: users.Role.Name,
+		UpdateAt: users.UpdatedAt.String(),
+	}
 }
 
 func (t *UserService) createToken(userId string) (*response.TokenGenerated, error) {
@@ -133,7 +115,10 @@ func (srv *UserService) GetAllUser() (users []response.ListUserResponse, err err
 		return nil, err
 	}
 	// mapping data to user response
-	users = srv.parsingModelToResponse(users_data).([]response.ListUserResponse)
+	users = make([]response.ListUserResponse, 0)
+	for _, user := range users_data {
+		users = append(users, *srv.parsingModelToResponse(user))
+	}
 	return users, nil
 }
 
@@ -143,7 +128,7 @@ func (srv *UserService) GetUserById(id string) (user *response.ListUserResponse,
 	if err != nil {
 		return nil, err
 	}
-	user = srv.parsingModelToResponse(finder).(*response.ListUserResponse)
+	user = srv.parsingModelToResponse(*finder)
 	return user, nil
 }
 
@@ -153,7 +138,10 @@ func (srv *UserService) GetUserByFiltering(filter map[string]interface{}) (users
 		return nil, err
 	}
 
-	users = srv.parsingModelToResponse(finder).([]response.ListUserResponse)
+	users = make([]response.ListUserResponse, 0)
+	for _, user := range finder {
+		users = append(users, *srv.parsingModelToResponse(user))
+	}
 	return users, nil
 }
 
@@ -173,9 +161,16 @@ func (srv *UserService) AddUser(body request.CreateUserRequest) (id *string, cod
 		return nil, constant.NotFound, errors.New("Role not registered")
 	}
 
-	user.Password, err = utils.HashPassword(user.Password)
+	// Check same user email has registered before
+	query := map[string]interface{}{
+		"email": user.Email,
+	}
+	listUser, err := srv.User.FindUser(query)
 	if err != nil {
-		return nil, constant.ServiceBroken, err
+		return nil, constant.InternalServerError, err
+	}
+	if len(listUser) > 0 {
+		return nil, constant.ValidationError, errors.New("User already registered")
 	}
 
 	err = srv.User.CreateUser(user)
@@ -217,7 +212,7 @@ func (srv *UserService) DeleteUser(id string) (code int, err error) {
 }
 
 func (srv *UserService) prepareLogin(user_login models.User, metadata *interface{}) (data *response.LoginResponse, code int, err error) {
-	data_user := srv.parsingModelToResponse(user_login).(*response.ListUserResponse)
+	data_user := srv.parsingModelToResponse(user_login)
 	data = &response.LoginResponse{
 		Id: data_user.Id,
 		Name: data_user.Name,
@@ -298,7 +293,7 @@ func (srv *UserService) pastLogin(check []models.Authentication) (data *response
 	for _, login := range check {
 		// check if token is still valid
 		if login.ExpiredAt.Time.After(time.Now()) {
-			data_user := srv.parsingModelToResponse(login.User).(*response.ListUserResponse)
+			data_user := srv.parsingModelToResponse(login.User)
 			data = &response.LoginResponse{
 				Id: data_user.Id,
 				Name: data_user.Name,

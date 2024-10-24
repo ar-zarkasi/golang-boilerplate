@@ -18,6 +18,11 @@ func Send(ctx *gin.Context, code int, message string, data ...interface{}) {
 	ctx.JSON(code, response{
 		Code: code,
 		Message: message,
-		Data: data,
+		Data: func() interface{} {
+			if len(data) == 1 {
+				return data[0]
+			}
+			return data
+		}(),
 	})
 }
