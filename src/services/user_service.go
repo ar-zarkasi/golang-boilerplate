@@ -86,7 +86,7 @@ func (t *UserService) createToken(userId string) (*response.TokenGenerated, erro
 	}, nil
 }
 
-func (srv *UserService) CreateFirstUser() (err error) {
+func (srv *UserService) CreateFirstUser(email string, password string) (err error) {
 
 	var firstRole *models.Role
 	firstRole, err = srv.Role.AdminRole()
@@ -94,9 +94,6 @@ func (srv *UserService) CreateFirstUser() (err error) {
 		utils.ErrorFatal(err)
 		return err
 	}
-
-	email := os.Getenv("ADMIN_EMAIL")
-	password := os.Getenv("ADMIN_PASSWORD")
 
 	query := map[string]interface{}{
 		"email": email,
@@ -119,11 +116,6 @@ func (srv *UserService) CreateFirstUser() (err error) {
 		Phone: "000000000000",
 		Password: password,
 		RoleId: firstRole.Id,
-	}
-	model.Password, err = utils.HashPassword(model.Password)
-	if err != nil {
-		utils.ErrorFatal(err)
-		return err
 	}
 
 	err = srv.User.CreateUser(model)
@@ -207,7 +199,7 @@ func (srv *UserService) UpdateUser(id string, body request.UpdateUserRequest) (c
 		data.Phone = *body.Phone
 	}
 
-	err = srv.User.UpdateUser(data)
+	err = srv.User.UpdateUser(*data)
 	if err != nil {
 		return constant.InternalServerError, err
 	}
@@ -349,5 +341,5 @@ func (srv *UserService) VerifyToken(tokenString string) (*models.User, error) {
 		return nil, err
 	}
 
-	return &modelUser, nil
+	return modelUser, nil
  }

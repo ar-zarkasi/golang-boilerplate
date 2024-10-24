@@ -7,7 +7,7 @@ import (
 	"app/src/repository"
 	"app/src/services"
 	"app/utils"
-	"fmt"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -36,7 +36,15 @@ func init() {
 
 	UserService, err := services.NewUserService(UserRepository, RoleRepository, &AuthRepository)
 	utils.ErrorFatal(err)
-	UserService.CreateFirstUser()
+	// initialize first user
+	email := os.Getenv("ADMIN_EMAIL")
+	password := os.Getenv("ADMIN_PASSWORD")
+	encryptedPassword, err := utils.HashPassword(password)
+	if err != nil {
+		utils.ErrorFatal(err)
+		return
+	}
+	UserService.CreateFirstUser(email, encryptedPassword)
 
 	// Middleware
 	authMiddleware := middleware.AuthMiddleware(UserService)
@@ -70,7 +78,6 @@ func roleRouter(router *gin.RouterGroup, validator *validator.Validate,Service s
 	controller := controller.NewRoleController(Service, validator)
 	role_route := router.Group("/roles")
 		role_route.GET("", controller.GetAllRole)
-		fmt.Println("Middleware", middleware[1])
 		sub_role_admin := role_route.Group("", *middleware[0], *middleware[1])
 			sub_role_admin.POST("", controller.CreateRole)
 			sub_role_admin.PUT("/:id", controller.UpdateRole)

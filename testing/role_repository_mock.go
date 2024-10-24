@@ -2,7 +2,6 @@ package testing
 
 import (
 	interfaces "app/src/interface"
-	"fmt"
 
 	"app/src/models"
 
@@ -19,7 +18,6 @@ func NewRoleMock(db *mock.Mock) (interfaces.RoleInterface) {
 
 func switchInterfaceToModelRole(v interface{}) *models.Role {
 	var role models.Role
-	fmt.Printf("Type V %T\n", v)
 	switch v.(type) {
 	case models.Role:
 		role = v.(models.Role)
@@ -54,8 +52,10 @@ func (t *RoleRepositoryMock) FindRoleById(id uint8) (role *models.Role, err erro
 	return role, err
 }
 func (t *RoleRepositoryMock) FindRole(filter map[string]interface{}) (user []models.Role, err error) {
-	m := t.Db.ExpectedCalls
-	return m[0].Arguments[0].([]models.Role), m[1].Arguments.Error(0)
+	m := t.Db.Called(filter)
+	user = m.Get(0).([]models.Role)
+	err = switchToError(m.Get(1))
+	return user, err
 }
 func (t *RoleRepositoryMock) CreateRole(name string) (*models.Role, error) {
 	m := t.Db.Called(name)

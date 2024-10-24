@@ -4,6 +4,8 @@ import (
 	"os"
 	"time"
 
+	"math/rand"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -33,4 +35,8 @@ func HashPassword(password string) (string, error) {
 func VerifyPassword(password, hash string) bool {
     err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
     return err == nil
+}
+
+func PickRandomInterface(arr []interface{}) interface{} {
+	return arr[rand.Intn(len(arr))]
 }

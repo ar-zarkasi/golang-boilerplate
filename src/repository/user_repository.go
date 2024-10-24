@@ -44,11 +44,11 @@ func (t *UserRepository) FindAllUser() ([]models.User, error) {
 	return users, result.Error
 }
 
-func (t *UserRepository) FindUserById(id uuid.UUID) (models.User, error) {
+func (t *UserRepository) FindUserById(id uuid.UUID) (*models.User, error) {
 	var user models.User
 	db := t.loadEager()
 	result := db.First(&user, "id = ?", id)
-	return user, result.Error
+	return &user, result.Error
 }
 
 func (t *UserRepository) FindUser(filter map[string]interface{}) ([]models.User, error) {

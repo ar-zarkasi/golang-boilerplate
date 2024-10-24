@@ -20,7 +20,7 @@ type RoleInterface interface {
 
 type UserInterface interface {
 	FindAllUser() ([]models.User, error)
-	FindUserById(id uuid.UUID) (user models.User, err error)
+	FindUserById(id uuid.UUID) (user *models.User, err error)
 	FindUser(filter map[string]interface{}) (user []models.User, err error)
 	CreateUser(user models.User) error
 	UpdateUser(user models.User) error

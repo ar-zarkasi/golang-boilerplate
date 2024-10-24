@@ -25,7 +25,7 @@ func NewTestRoleService() *RoleServiceTest {
 	return &RoleServiceTest{repository: RepoMock, services: *service}
 }
 
-func TestMain(t *testing.T) {
+func TestRoleService(t *testing.T) {
 	serverTest := NewTestRoleService()
 	if serverTest == nil {
 		fmt.Println("Error", errors.New("Role Service is not defined"))
@@ -64,7 +64,6 @@ func (R RoleServiceTest) TestCreateAdmin(t *testing.T) {
 	R.repository.Db.On("AdminRole").Return(nil, assert.AnError)
 	R.repository.Db.On("CreateRole", role.Name).Return(role, nil)
 	result, err := R.services.CreateAdminRole()
-	fmt.Println("Result", result, role.Id)
 	assert.Equal(t, role.Id, uint8(result))
 	assert.Nil(t, err)
 }
