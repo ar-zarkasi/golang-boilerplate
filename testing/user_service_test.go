@@ -3,13 +3,16 @@ package testing
 import (
 	"app/src/constant"
 	"app/src/http/request"
+	"app/src/http/response"
 	"app/src/models"
 	"app/src/services"
 	"app/utils"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"math/rand"
 
@@ -30,8 +33,7 @@ func NewTestUserService() *UserServiceTest {
 	Repo := &UserRepositoryMock{Db: &mock.Mock{}}
 	RepoRole := &RoleRepositoryMock{Db: &mock.Mock{}}
 	RepoAuth := &AuthRepositoryMock{Db: &mock.Mock{}}
-	RepoAuthInterface := NewAuthMock(RepoAuth.Db)
-	service, _ := services.NewUserService(Repo, RepoRole, &RepoAuthInterface)
+	service, _ := services.NewUserService(Repo, RepoRole, RepoAuth)
 	return &UserServiceTest{user: *Repo, roles: *RepoRole, auth: *RepoAuth, services: *service}
 }
 
@@ -40,8 +42,7 @@ func (R *UserServiceTest) SetupTest(t *testing.T) {
     R.user.Db = &mock.Mock{}  // Reset the mock
     R.roles.Db = &mock.Mock{}  // Reset the mock
 	R.auth.Db = &mock.Mock{}  // Reset the mock
-	authInterface := NewAuthMock(R.auth.Db)
-	service, _ := services.NewUserService(&R.user, &R.roles, &authInterface)
+	service, _ := services.NewUserService(&R.user, &R.roles, &R.auth)
     R.services = *service  // Reinitialize the service
 }
 
@@ -56,6 +57,9 @@ func TestUserService(t *testing.T) {
 	t.Run("TestGetUserById", serverTest.TestGetUserById)
 	t.Run("TestGetUserByFiltering", serverTest.TestGetUserByFiltering)
 	t.Run("TestAddUser", serverTest.TestAddUser)
+	t.Run("TestUpdateUser", serverTest.TestUpdateUser)
+	t.Run("TestDeleteUser", serverTest.TestDeleteUser)
+	// t.Run("TestLoginWithEmail", serverTest.TestLoginEmailSuccess)
 }
 
 func (R *UserServiceTest) TestCreateFirstUser(t *testing.T) {
@@ -233,4 +237,137 @@ func (R *UserServiceTest) TestAddUser(t *testing.T){
 	assert.Nil(t, err)
 	assert.NotNil(t, idNew)
 	assert.Equal(t, constant.SuccessCreate, code)
+}
+
+func (R *UserServiceTest) TestUpdateUser(t *testing.T) {
+	R.SetupTest(t)
+	
+	roles := []uint8{1, 2, 3}
+	randomroles := roles[rand.Intn(len(roles))]
+	user := models.User{
+		Id: uuid.New(),
+		Name: faker.Name(),
+		Email: faker.Email(),
+		Phone: faker.PhoneNumber,
+		Password: faker.Password(),
+		RoleId: randomroles,
+	}
+	encPassword, _ := utils.HashPassword(user.Password)
+	user.Password = encPassword
+	R.user.Db.On("FindUserById", user.Id).Return(user, nil)
+
+	randomroles = roles[rand.Intn(len(roles))]
+	phoneChange := faker.PhoneNumber
+	updaterequest := request.UpdateUserRequest{
+		Name: faker.Name(),
+		Email: faker.Email(),
+		Phone: &phoneChange,
+		RoleId: randomroles,
+	}
+
+	userAfterUpdate := models.User{
+		Id: user.Id,
+		Name: updaterequest.Name,
+		Email: updaterequest.Email,
+		Password: user.Password,
+		Phone: phoneChange,
+		RoleId: updaterequest.RoleId,
+	}
+
+	R.user.Db.On("UpdateUser", userAfterUpdate).Return(nil)
+	code, err := R.services.UpdateUser(user.Id.String(), updaterequest)
+	assert.Nil(t, err)
+	assert.Equal(t, constant.Success, code)
+}
+
+func (R *UserServiceTest) TestDeleteUser(t *testing.T) {
+	R.SetupTest(t)
+	roles := []uint8{1, 2, 3}
+	randomroles := roles[rand.Intn(len(roles))]
+	encPassword, _ := utils.HashPassword(faker.Password())
+	user := models.User{
+		Id: uuid.New(),
+		Name: faker.Name(),
+		Email: faker.Email(),
+		Phone: faker.PhoneNumber,
+		Password: encPassword,
+		RoleId: randomroles,
+	}
+
+	R.user.Db.On("FindUserById", user.Id).Return(user, nil)
+	R.user.Db.On("DeleteUser", user.Id).Return(nil)
+	code, err := R.services.DeleteUser(user.Id.String())
+	assert.Nil(t, err)
+	assert.Equal(t, constant.Success, code)
+}
+
+func (R *UserServiceTest) TestLoginEmailSuccess(t *testing.T) {
+	R.SetupTest(t)
+	
+	roles := 1
+	role := models.Role{ Id: uint8(roles), Name: "Administrator" }
+	requestBody := request.LoginRequest{
+		Username: faker.Email(),
+		Password: faker.Password(),
+	}
+	passwordEncrypted, _ := utils.HashPassword(requestBody.Password)
+	user := models.User{
+		Id: uuid.New(),
+		Name: faker.Name(),
+		Email: requestBody.Username,
+		Phone: faker.TollFreePhoneNumber(),
+		Password: passwordEncrypted,
+		RoleId: role.Id,
+		Role: role,
+	}
+
+	listUser := make([]models.User, 0)
+	listUser = append(listUser, user)
+
+	query := map[string]interface{}{
+		"email": user.Email,
+	}
+	R.user.Db.On("FindUser",query).Return(listUser, nil)
+	checkPassword := utils.VerifyPassword(requestBody.Password, user.Password)
+	assert.Equal(t, true, checkPassword)
+
+	// Check if user has already login, no need generate new token
+	auths := make([]models.Authentication, 0)
+	R.auth.Db.On("FindTokenByUserId", user.Id.String()).Return(auths, assert.AnError)
+
+	expired := time.Now().Add(time.Hour * 24)
+	storedData := map[string]interface{}{
+		"userid": user.Id.String(),
+		"exp": expired.Unix(),
+	}
+	token, _ := utils.GenerateToken(storedData, &expired)
+	assert.NotNil(t, token)
+	
+	loginResponse := response.LoginResponse{
+		Id: user.Id.String(),
+		Name: user.Name,
+		Email: user.Email,
+		Phone: user.Phone,
+		RoleId: int(user.RoleId),
+		Role: user.Role.Name,
+		Token: token.Token,
+		ExpiredToken: token.Expired.Format(constant.FORMAT_DATETIME),
+		RefreshToken: "",
+		UpdateAt: user.UpdatedAt.Format(constant.FORMAT_DATETIME),
+	}
+	
+	refreshToken, _ := utils.GenerateToken(user, &expired)
+	assert.NotNil(t, refreshToken)
+
+	loginResponse.RefreshToken = refreshToken.Token
+	user.RefreshToken = sql.NullString{ String: refreshToken.Token, Valid: true }
+	user.RefreshTokenExpiredAt = sql.NullTime{ Time: refreshToken.Expired, Valid: true }
+	R.user.Db.On("UpdateUser", user).Return(nil)
+	loginResponse.UpdateAt = user.UpdatedAt.Format(constant.FORMAT_DATETIME)
+
+	R.auth.Db.On("Signin", user.Id.String(), token.Token, expired, nil).Return(nil)
+	LoggedIn, code, err := R.services.Login(requestBody, nil)
+	assert.Nil(t, err)
+	assert.Equal(t, constant.Success, code)
+	assert.Equal(t, loginResponse, LoggedIn)
 }

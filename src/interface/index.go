@@ -1,7 +1,6 @@
 package interfaces
 
 import (
-	"app/src/http/response"
 	"app/src/models"
 	"time"
 
@@ -30,7 +29,7 @@ type UserInterface interface {
 type AuthInterface interface {
 	FindToken(token string) (login models.Authentication, err error)
 	FindTokenByUserId(userId string) (login []models.Authentication, err error)
-	Signin(user models.User, token string, expired *time.Time, metadata *interface{}) (*response.TokenResponse, error)
+	Signin(user_id string, token string, expired *time.Time, metadata *interface{}) error
 	DeleteToken(login models.Authentication) error
 	DeleteTokenByID(id ...uint64) error
 }

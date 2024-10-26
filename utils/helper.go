@@ -1,11 +1,13 @@
 package utils
 
 import (
+	httpResponse "app/src/http/response"
 	"os"
 	"time"
 
 	"math/rand"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -39,4 +41,28 @@ func VerifyPassword(password, hash string) bool {
 
 func PickRandomInterface(arr []interface{}) interface{} {
 	return arr[rand.Intn(len(arr))]
+}
+
+func GenerateToken(data interface{}, expired *time.Time) (*httpResponse.TokenGenerated, error) {
+	secretKeyString := os.Getenv("SECRET_KEY")
+	if secretKeyString == "" {
+		secretKeyString = "GOLANG_BOILERPLATE"
+	}
+	secretKey := []byte(secretKeyString)
+
+	if expired == nil {
+		exp := time.Now().Add(time.Hour * 24)
+		expired = &exp
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, 
+		jwt.MapClaims{"data": data})
+	tokenString, err := token.SignedString(secretKey)
+    if err != nil {
+    	return nil, err
+    }
+
+ 	return &httpResponse.TokenGenerated{
+		Token: tokenString,
+		Expired: *expired,
+	}, nil
 }

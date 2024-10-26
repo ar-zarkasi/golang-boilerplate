@@ -34,7 +34,7 @@ func init() {
 	_, err = RoleService.CreateAdminRole()
 	utils.ErrorFatal(err)
 
-	UserService, err := services.NewUserService(UserRepository, RoleRepository, &AuthRepository)
+	UserService, err := services.NewUserService(UserRepository, RoleRepository, AuthRepository)
 	utils.ErrorFatal(err)
 	// initialize first user
 	email := os.Getenv("ADMIN_EMAIL")

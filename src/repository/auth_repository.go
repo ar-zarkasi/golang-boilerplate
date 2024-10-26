@@ -1,14 +1,13 @@
 package repository
 
 import (
-	"app/src/constant"
-	"app/src/http/response"
 	interfaces "app/src/interface"
 	"app/src/models"
 	"database/sql"
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -36,14 +35,14 @@ func (t *AuthRepository) FindTokenByUserId(userId string) (login []models.Authen
 	return login, err
 }
 
-func (t *AuthRepository) Signin(user models.User, token string, expired *time.Time, metadata *interface{}) (*response.TokenResponse, error) {
+func (t *AuthRepository) Signin(user_id string, token string, expired *time.Time, metadata *interface{}) error {
 	jsonString, err := json.Marshal(metadata)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	login := models.Authentication{
-		UserId: user.Id,
+		UserId: uuid.MustParse(user_id),
 		Token: token,
 		ExpiredAt: sql.NullTime{Time: *expired, Valid: true},
 		MetaData: sql.NullString{String: string(jsonString), Valid: true},
@@ -51,15 +50,10 @@ func (t *AuthRepository) Signin(user models.User, token string, expired *time.Ti
 
 	err = t.Db.Create(&login).Error
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	resp := response.TokenResponse{
-		UserId: login.UserId.String(),
-		Token: login.Token,
-		ExpiredAt: login.ExpiredAt.Time.Format(constant.FORMAT_DATETIME),
-	}
-	return &resp, err
+	return err
 }
 
 func (t *AuthRepository) DeleteToken(login models.Authentication) error {

@@ -1,9 +1,9 @@
 package testing
 
 import (
-	"app/src/http/response"
 	interfaces "app/src/interface"
 	"app/src/models"
+	"fmt"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -37,14 +37,14 @@ func (t *AuthRepositoryMock) FindToken(token string) (login models.Authenticatio
 func (t *AuthRepositoryMock) FindTokenByUserId(userId string) (login []models.Authentication, err error){
 	m := t.Db.Called(userId)
 	login = m.Get(0).([]models.Authentication)
+	fmt.Println("Nilai login", login)
 	err = switchToError(m.Get(1))
 	return login, err
 }
-func (t *AuthRepositoryMock) Signin(user models.User, token string, expired *time.Time, metadata *interface{}) (*response.TokenResponse, error){
-	m := t.Db.Called(user, token, expired, metadata)
-	resp := m.Get(0).(*response.TokenResponse)
-	err := switchToError(m.Get(1))
-	return resp, err
+func (t *AuthRepositoryMock) Signin(user_id string, token string, expired *time.Time, metadata *interface{}) error{
+	m := t.Db.Called(user_id, token, expired, metadata)
+	err := switchToError(m.Get(0))
+	return err
 }
 func (t *AuthRepositoryMock) DeleteToken(login models.Authentication) error{
 	m := t.Db.Called(login)

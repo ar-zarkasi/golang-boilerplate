@@ -19,11 +19,11 @@ import (
 type UserService struct {
 	User interfaces.UserInterface
 	Role interfaces.RoleInterface
-	Auth *interfaces.AuthInterface
+	Auth interfaces.AuthInterface
 	Secret *[]byte
 }
 
-func NewUserService(UserRepository interfaces.UserInterface, RoleRepository interfaces.RoleInterface, Auth *interfaces.AuthInterface) (service *UserService, err error) {
+func NewUserService(UserRepository interfaces.UserInterface, RoleRepository interfaces.RoleInterface, Auth interfaces.AuthInterface) (service *UserService, err error) {
 	secretKeyString := os.Getenv("SECRET_KEY")
 	// If secret key is not set, use default secret key
 	if secretKeyString == "" {
@@ -48,24 +48,6 @@ func (t *UserService) parsingModelToResponse(users models.User) *response.ListUs
 		Role: users.Role.Name,
 		UpdateAt: users.UpdatedAt.String(),
 	}
-}
-
-func (t *UserService) createToken(userId string) (*response.TokenGenerated, error) {
-	expired := time.Now().Add(time.Hour * 24)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, 
-        jwt.MapClaims{ 
-			"userid": userId, 
-			"exp": expired.Unix(), 
-        })
-	tokenString, err := token.SignedString(*t.Secret)
-    if err != nil {
-    	return nil, err
-    }
-
- 	return &response.TokenGenerated{
-		Token: tokenString,
-		Expired: expired,
-	}, nil
 }
 
 func (srv *UserService) CreateFirstUser(email string, password string) (err error) {
@@ -211,112 +193,80 @@ func (srv *UserService) DeleteUser(id string) (code int, err error) {
 	return constant.Success, nil
 }
 
-func (srv *UserService) prepareLogin(user_login models.User, metadata *interface{}) (data *response.LoginResponse, code int, err error) {
-	data_user := srv.parsingModelToResponse(user_login)
-	data = &response.LoginResponse{
-		Id: data_user.Id,
-		Name: data_user.Name,
-		Email: data_user.Email,
-		Phone: data_user.Phone,
-		RoleId: int(user_login.RoleId),
-		Role: data_user.Role,
-		Token: "",
-		ExpiredToken: "",
-		RefreshToken: "",
-		UpdateAt: data_user.UpdateAt,
-	}
-	// creating new token
-	token, err := srv.createToken(data.Id)
-	if err != nil {
-		return nil, constant.InternalServerError, err
-	}
-
-	// creating new refresh token
-	refreshToken, err := srv.createToken(data.Id)
-	if err != nil {
-		return nil, constant.InternalServerError, err
-	}
-
-	new_token, err := (*srv.Auth).Signin(user_login, token.Token, &token.Expired, metadata)
-	data.Token = new_token.Token
-	data.ExpiredToken = new_token.ExpiredAt
-	data.RefreshToken = refreshToken.Token
-
-	// Updating Data
-	user_login.RefreshToken = sql.NullString{String: refreshToken.Token, Valid: true}
-	user_login.RefreshTokenExpiredAt = sql.NullTime{Time: refreshToken.Expired, Valid: true}
-	err = srv.User.UpdateUser(user_login)
-	if err != nil {
-		return nil, constant.InternalServerError, err
-	}
-	data.UpdateAt = user_login.UpdatedAt.String()
-
-	return data, constant.Success, nil
-}
-
 func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}) (data *response.LoginResponse, code int, err error) {
 	query := map[string]interface{}{
 		"email": body.Username,
 	}
-	user, err := srv.User.FindUser(query)
+	users, err := srv.User.FindUser(query)
 	if err != nil {
-		// checking phone
-		query = map[string]interface{}{
-			"phone": body.Username,
-		}
-		user, err = srv.User.FindUser(query)
-		if err != nil {
-			return nil, constant.NotFound, err
-		}
+		return nil, constant.InternalServerError, err
+	}
+	if len(users) == 0 {
+		return nil, constant.NotFound, errors.New("User not found")
 	}
 
-	user_login := user[0]
-
-	check := utils.VerifyPassword(body.Password, user_login.Password)
-	if check == false {
-		return nil, constant.WrongCredential, errors.New("Password incorrect")
+	user := users[0]
+	if !utils.VerifyPassword(body.Password, user.Password) {
+		return nil, constant.Unauthorized, errors.New("Wrong Credential")
 	}
 
-	// check if has already login
-	check_login, err := (*srv.Auth).FindTokenByUserId(user_login.Id.String())
-	if err == nil && len(check_login) > 0 {
-		return srv.pastLogin(check_login)
+	resp := response.LoginResponse{
+		Id: user.Id.String(),
+		Name: user.Name,
+		Email: user.Email,
+		Phone: user.Phone,
+		Role: user.Role.Name,
+		Token: "",
+		ExpiredToken: "",
+		RefreshToken: user.RefreshToken.String,
+		RoleId: int(user.RoleId),
+		UpdateAt: user.UpdatedAt.String(),
 	}
 
-	return srv.prepareLogin(user_login, metadata)
-}
-
-func (srv *UserService) pastLogin(check []models.Authentication) (data *response.LoginResponse, code int, err error) {
-	skip := 0
-	lengthAuth := len(check)
-	user := check[0].User
-	for _, login := range check {
-		// check if token is still valid
-		if login.ExpiredAt.Time.After(time.Now()) {
-			data_user := srv.parsingModelToResponse(login.User)
-			data = &response.LoginResponse{
-				Id: data_user.Id,
-				Name: data_user.Name,
-				Email: data_user.Email,
-				Phone: data_user.Phone,
-				RoleId: int(login.User.RoleId),
-				Role: data_user.Role,
-				Token: login.Token,
-				ExpiredToken: login.ExpiredAt.Time.Format(constant.FORMAT_DATETIME),
-				RefreshToken: login.User.RefreshToken.String,
-				UpdateAt: data_user.UpdateAt,
+	checkHasLogin, err := srv.Auth.FindTokenByUserId(user.Id.String())
+	if err == nil && len(checkHasLogin) > 0 {
+		for _, authenticate := range checkHasLogin {
+			if authenticate.ExpiredAt.Time.After(time.Now()) {
+				resp.Token = authenticate.Token
+				resp.ExpiredToken = authenticate.ExpiredAt.Time.Format(constant.FORMAT_DATETIME)
+				break
 			}
-			return data, constant.Success, nil
 		}
-		(*srv.Auth).DeleteToken(login)	
-		skip++;
-	}
-	
-	if skip == lengthAuth {
-		return srv.prepareLogin(user, nil)
+		return &resp, constant.Success, nil
 	}
 
-	return nil, constant.WrongCredential, errors.New("Token expired")
+	expired := time.Now().Add(time.Hour * 24)
+	datatoken := map[string]interface{}{"userid": user.Id.String(), "exp": expired.Unix()}
+	token, err := utils.GenerateToken(datatoken, &expired)
+	if err != nil {
+		return nil, constant.InternalServerError, err
+	}
+
+	resp.Token = token.Token
+	resp.ExpiredToken = token.Expired.Format(constant.FORMAT_DATETIME)
+
+	// regenerate refresh token
+	refreshToken, err := utils.GenerateToken(user, nil)
+	if err != nil {
+		return nil, constant.InternalServerError, err
+	}
+	resp.RefreshToken = user.RefreshToken.String
+	user.RefreshToken = sql.NullString{ String: refreshToken.Token, Valid: true}
+	user.RefreshTokenExpiredAt = sql.NullTime{Time: refreshToken.Expired, Valid: true}
+
+	err = srv.User.UpdateUser(user)
+	if err != nil {
+		return nil, constant.InternalServerError, err
+	}
+	resp.UpdateAt = user.UpdatedAt.String()
+
+	// Record Login
+	err = srv.Auth.Signin(user.Id.String(), resp.Token, &token.Expired, metadata)
+	if err != nil {
+		return nil, constant.InternalServerError, err
+	}
+
+	return &resp, constant.Success, nil
 }
 
 func (srv *UserService) VerifyToken(tokenString string) (*models.User, error) {
