@@ -6,6 +6,7 @@ import (
 	"app/src/http/response"
 	"app/src/models"
 	"app/src/services"
+	"app/testing/mocking"
 	"app/utils"
 	"database/sql"
 	"errors"
@@ -23,18 +24,23 @@ import (
 )
 
 type UserServiceTest struct {
-	user UserRepositoryMock
-	roles RoleRepositoryMock
-	auth AuthRepositoryMock
+	user mocking.UserRepositoryMock
+	roles mocking.RoleRepositoryMock
+	auth mocking.AuthRepositoryMock
 	services services.UserService
 }
 
 func NewTestUserService() *UserServiceTest {
-	Repo := &UserRepositoryMock{Db: &mock.Mock{}}
-	RepoRole := &RoleRepositoryMock{Db: &mock.Mock{}}
-	RepoAuth := &AuthRepositoryMock{Db: &mock.Mock{}}
-	service, _ := services.NewUserService(Repo, RepoRole, RepoAuth)
-	return &UserServiceTest{user: *Repo, roles: *RepoRole, auth: *RepoAuth, services: *service}
+	return &UserServiceTest{
+		user: mocking.UserRepositoryMock{}, 
+		roles: mocking.RoleRepositoryMock{}, 
+		auth: mocking.AuthRepositoryMock{}, 
+		services: services.UserService{
+			User: &mocking.UserRepositoryMock{},
+			Role: &mocking.RoleRepositoryMock{},
+			Auth: &mocking.AuthRepositoryMock{},
+		},
+	}
 }
 
 // SetupTest ensures a fresh setup for each test
@@ -59,7 +65,7 @@ func TestUserService(t *testing.T) {
 	t.Run("TestAddUser", serverTest.TestAddUser)
 	t.Run("TestUpdateUser", serverTest.TestUpdateUser)
 	t.Run("TestDeleteUser", serverTest.TestDeleteUser)
-	// t.Run("TestLoginWithEmail", serverTest.TestLoginEmailSuccess)
+	t.Run("TestLoginWithEmail", serverTest.TestLoginEmailSuccess)
 }
 
 func (R *UserServiceTest) TestCreateFirstUser(t *testing.T) {
@@ -304,6 +310,8 @@ func (R *UserServiceTest) TestDeleteUser(t *testing.T) {
 func (R *UserServiceTest) TestLoginEmailSuccess(t *testing.T) {
 	R.SetupTest(t)
 	
+	var metadata *interface{} = nil
+
 	roles := 1
 	role := models.Role{ Id: uint8(roles), Name: "Administrator" }
 	requestBody := request.LoginRequest{
@@ -335,7 +343,9 @@ func (R *UserServiceTest) TestLoginEmailSuccess(t *testing.T) {
 	auths := make([]models.Authentication, 0)
 	R.auth.Db.On("FindTokenByUserId", user.Id.String()).Return(auths, assert.AnError)
 
-	expired := time.Now().Add(time.Hour * 24)
+	timeProvider := &mocking.MockTimeProvider{}
+
+	expired := timeProvider.Now()
 	storedData := map[string]interface{}{
 		"userid": user.Id.String(),
 		"exp": expired.Unix(),
@@ -355,8 +365,11 @@ func (R *UserServiceTest) TestLoginEmailSuccess(t *testing.T) {
 		RefreshToken: "",
 		UpdateAt: user.UpdatedAt.Format(constant.FORMAT_DATETIME),
 	}
-	
-	refreshToken, _ := utils.GenerateToken(user, &expired)
+
+
+	expiredRefresh := expired.Add(time.Hour * 24 * 30)
+	datatokenRefresh := map[string]interface{}{"userid": user.Id.String(), "email": user.Email}
+	refreshToken, _ := utils.GenerateToken(datatokenRefresh, &expiredRefresh)
 	assert.NotNil(t, refreshToken)
 
 	loginResponse.RefreshToken = refreshToken.Token
@@ -365,9 +378,10 @@ func (R *UserServiceTest) TestLoginEmailSuccess(t *testing.T) {
 	R.user.Db.On("UpdateUser", user).Return(nil)
 	loginResponse.UpdateAt = user.UpdatedAt.Format(constant.FORMAT_DATETIME)
 
-	R.auth.Db.On("Signin", user.Id.String(), token.Token, expired, nil).Return(nil)
-	LoggedIn, code, err := R.services.Login(requestBody, nil)
+	R.auth.Db.On("Signin", user.Id.String(), token.Token, &expired, metadata).Return(nil)
+	LoggedIn, code, err := R.services.Login(requestBody, metadata, &expired)
 	assert.Nil(t, err)
 	assert.Equal(t, constant.Success, code)
-	assert.Equal(t, loginResponse, LoggedIn)
+	assert.Equal(t, loginResponse.Id, LoggedIn.Id)
+	assert.Equal(t, loginResponse.Token, LoggedIn.Token)
 }

@@ -1,9 +1,8 @@
-package testing
+package mocking
 
 import (
 	interfaces "app/src/interface"
 	"app/src/models"
-	"fmt"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -37,7 +36,6 @@ func (t *AuthRepositoryMock) FindToken(token string) (login models.Authenticatio
 func (t *AuthRepositoryMock) FindTokenByUserId(userId string) (login []models.Authentication, err error){
 	m := t.Db.Called(userId)
 	login = m.Get(0).([]models.Authentication)
-	fmt.Println("Nilai login", login)
 	err = switchToError(m.Get(1))
 	return login, err
 }

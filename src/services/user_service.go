@@ -193,7 +193,7 @@ func (srv *UserService) DeleteUser(id string) (code int, err error) {
 	return constant.Success, nil
 }
 
-func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}) (data *response.LoginResponse, code int, err error) {
+func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}, expired *time.Time) (data *response.LoginResponse, code int, err error) {
 	query := map[string]interface{}{
 		"email": body.Username,
 	}
@@ -209,7 +209,6 @@ func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}) 
 	if !utils.VerifyPassword(body.Password, user.Password) {
 		return nil, constant.Unauthorized, errors.New("Wrong Credential")
 	}
-
 	resp := response.LoginResponse{
 		Id: user.Id.String(),
 		Name: user.Name,
@@ -229,15 +228,14 @@ func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}) 
 			if authenticate.ExpiredAt.Time.After(time.Now()) {
 				resp.Token = authenticate.Token
 				resp.ExpiredToken = authenticate.ExpiredAt.Time.Format(constant.FORMAT_DATETIME)
-				break
+				return &resp, constant.Success, nil
 			}
 		}
-		return &resp, constant.Success, nil
 	}
 
-	expired := time.Now().Add(time.Hour * 24)
+	// expired := timeProvider.Now().Add(time.Hour * 24)
 	datatoken := map[string]interface{}{"userid": user.Id.String(), "exp": expired.Unix()}
-	token, err := utils.GenerateToken(datatoken, &expired)
+	token, err := utils.GenerateToken(datatoken, expired)
 	if err != nil {
 		return nil, constant.InternalServerError, err
 	}
@@ -246,7 +244,9 @@ func (srv *UserService) Login(body request.LoginRequest, metadata *interface{}) 
 	resp.ExpiredToken = token.Expired.Format(constant.FORMAT_DATETIME)
 
 	// regenerate refresh token
-	refreshToken, err := utils.GenerateToken(user, nil)
+	addedExpire := expired.Add(time.Hour * 24 * 30)
+	datatoken = map[string]interface{}{"userid": user.Id.String(), "email": user.Email}
+	refreshToken, err := utils.GenerateToken(datatoken, &addedExpire)
 	if err != nil {
 		return nil, constant.InternalServerError, err
 	}

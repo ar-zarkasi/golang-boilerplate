@@ -7,6 +7,7 @@ import (
 	"app/src/services"
 	"app/utils"
 	"errors"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -121,7 +122,9 @@ func (controller *UserController) Login(ctx *gin.Context) {
 		return
 	}
 	metadata := req.Metadata
-	login, code, err := controller.UserService.Login(req, metadata)
+	timeProvider := utils.DefaultTimeProvider{}
+	expired := timeProvider.Now().Add(time.Hour * 24)
+	login, code, err := controller.UserService.Login(req, metadata, &expired)
 	if err != nil {
 		utils.ErrorResponse(ctx, code, err.Error())
 		return

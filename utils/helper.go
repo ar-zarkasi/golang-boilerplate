@@ -21,12 +21,6 @@ func ContainString(s []string, str string) bool {
 	return false
 }
 
-func IntDateToString(date int) string {
-	timezone := os.Getenv("TZ")
-	dateString := time.Unix(int64(date), 0).In(time.FixedZone(timezone, 0))
-	return dateString.Format(time.RFC3339)
-}
-
 // HashPassword generates a bcrypt hash for the given password.
 func HashPassword(password string) (string, error) {
     bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)

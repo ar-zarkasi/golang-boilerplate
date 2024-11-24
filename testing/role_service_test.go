@@ -3,6 +3,7 @@ package testing
 import (
 	"app/src/models"
 	"app/src/services"
+	"app/testing/mocking"
 	"errors"
 	"fmt"
 	"testing"
@@ -14,14 +15,14 @@ import (
 
 
 type RoleServiceTest struct {
-	repository RoleRepositoryMock
+	repository mocking.RoleRepositoryMock
 	services  services.RoleService
 }
 
 func NewTestRoleService() *RoleServiceTest {
-	Repo := &RoleRepositoryMock{Db: &mock.Mock{}}
-	RepoMock := RoleRepositoryMock{Db: Repo.Db}
-	service, _ := services.NewRoleService(Repo)
+	Repo := mocking.RoleRepositoryMock{Db: &mock.Mock{}}
+	RepoMock := mocking.RoleRepositoryMock{Db: Repo.Db}
+	service, _ := services.NewRoleService(&Repo)
 	return &RoleServiceTest{repository: RepoMock, services: *service}
 }
 

@@ -1,4 +1,4 @@
-package testing
+package mocking
 
 import (
 	interfaces "app/src/interface"
