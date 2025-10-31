@@ -574,12 +574,7 @@ docker run -p 5000:5000 --env-file .env go-boilerplate:prod
 ```bash
 GIN_MODE=release
 PORT=5000
-DB_TYPE=postgres
-DB_HOST=your-db-host
-DB_PORT=5432
-DB_USER=your-user
-DB_PASSWORD=your-password
-DB_NAME=your-database
+FILE_CONFIG=app.toml
 ```
 
 ## 🤝 Contributing
