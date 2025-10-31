@@ -20,13 +20,12 @@
 package main
 
 import (
+	"app/docs"
 	"app/src/console"
 	"app/src/helpers"
 	"app/src/router"
 	"log"
 	"os"
-
-	"github.com/swaggo/swag/example/basic/docs"
 )
 
 func main() {
