@@ -603,7 +603,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Your Name**
 - Email: arfan.zarkasi@gmail.com
-- GitHub: [@yourusername](https://github.com/yourusername)
+- GitHub: [@ar-zarkasi](https://github.com/ar-zarkasi)
 
 ## 🙏 Acknowledgments
 
@@ -614,10 +614,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Stats
 
-![GitHub stars](https://img.shields.io/github/stars/yourusername/golang-boilerplate?style=social)
-![GitHub forks](https://img.shields.io/github/forks/yourusername/golang-boilerplate?style=social)
-![GitHub issues](https://img.shields.io/github/issues/yourusername/golang-boilerplate)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/yourusername/golang-boilerplate)
+![GitHub stars](https://img.shields.io/github/stars/ar-zarkasi/golang-boilerplate?style=social)
+![GitHub forks](https://img.shields.io/github/forks/ar-zarkasi/golang-boilerplate?style=social)
+![GitHub issues](https://img.shields.io/github/issues/ar-zarkasi/golang-boilerplate)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/ar-zarkasi/golang-boilerplate)
 
 ---
 
