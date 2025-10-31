@@ -99,7 +99,7 @@ func (c *AuthController) SignUp(ctx *gin.Context) {
 // @Success      200 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Token refreshed successfully"
 // @Failure      401 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Unauthorized - invalid or missing token"
 // @Failure      500 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Internal server error"
-// @Router       /auth/refresh [post]
+// @Router       /auth/refresh [get]
 func (c *AuthController) RefreshToken(ctx *gin.Context) {
 	tokenrefresh := c.h.GetTokenActive()
 	if tokenrefresh == "" {
@@ -133,7 +133,7 @@ func (c *AuthController) RefreshToken(ctx *gin.Context) {
 // @Success      200 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Logout successful"
 // @Failure      401 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Unauthorized - invalid or missing token"
 // @Failure      500 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Internal server error"
-// @Router       /auth/signout [post]
+// @Router       /auth/signout [get]
 func (c *AuthController) SignOut(ctx *gin.Context) {
 	token := c.h.GetUserToken()
 	if token == "" {
