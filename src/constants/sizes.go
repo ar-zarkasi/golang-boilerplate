@@ -1,0 +1,7 @@
+package constants
+
+const (
+	DEFAULT_SIZE_BUFFER = 1024
+	DEFAULT_LIMIT_DATA  = 50
+	DEFAULT_LENGTH_KEY  = 32
+)

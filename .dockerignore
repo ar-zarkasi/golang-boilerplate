@@ -1,9 +1,0 @@
-docker-compose.yaml
-Dockerfile*
-.env*
-.git
-_DS_Store
-README*
-build
-runner.conf
-gin-bin
