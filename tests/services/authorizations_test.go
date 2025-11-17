@@ -406,6 +406,81 @@ func (s *authorizationsServiceTestable) AppHasAdministrator() bool {
 	return hit > 0
 }
 
+func (s *authorizationsServiceTestable) RegisterUser(userRequest types.RegisterUserRequest) (models.User, int, error) {
+	var (
+		userNew     models.User
+		userProfile models.UserProfile
+		userRole    models.UserRole
+	)
+	if userRequest.Username != nil {
+		checkUsername, err := s.userRepository.GetByUsername(*userRequest.Username)
+		if err == nil && checkUsername.ID != "" {
+			return userNew, constants.ValidationError, errors.New("username already registered")
+		}
+		userNew.Username = *userRequest.Username
+	}
+
+	if userRequest.Email != "" {
+		userRequest.Email = toLower(userRequest.Email)
+		checkEmail, err := s.userRepository.GetByEmail(userRequest.Email)
+		if err == nil && checkEmail.ID != "" {
+			return userNew, constants.ValidationError, errors.New("email already registered")
+		}
+		userNew.Email = userRequest.Email
+		if userNew.Username == "" {
+			userNew.Username = splitByAt(userRequest.Email)[0]
+		}
+	} else if userRequest.Phone != "" {
+		userRequest.Phone = s.Helper.NormalizePhone(userRequest.Phone)
+		checkPhone, err := s.userRepository.GetByPhone(userRequest.Phone)
+		if err == nil && checkPhone.ID != "" {
+			return userNew, constants.ValidationError, errors.New("phone already registered")
+		}
+		if userNew.Username == "" {
+			userNew.Username = userRequest.Phone
+		}
+	}
+
+	PasswordHash, err := s.Helper.HashPassword(userRequest.Password)
+	if err != nil {
+		return userNew, constants.InternalServerError, err
+	}
+
+	userNew.PasswordHash = PasswordHash
+	userNew.IsActive = true
+	userNew.EmailVerified = false
+	err = s.userRepository.Create(&userNew)
+	if err != nil {
+		return models.User{}, constants.InternalServerError, err
+	}
+
+	userProfile.UserID = userNew.ID
+	userProfile.FirstName = splitBySpace(userRequest.FullName)[0]
+	if len(splitBySpace(userRequest.FullName)) > 1 {
+		userProfile.LastName = joinBySpace(splitBySpace(userRequest.FullName)[1:])
+	}
+	userProfile.Timezone = s.Helper.DefaultValue(userRequest.Timezone, constants.DEFAULT_TIMEZONE)
+	userProfile.Language = s.Helper.DefaultValue(userRequest.Language, constants.DEFAULT_LOCALE)
+	err = s.userProfileRepository.Create(&userProfile)
+	if err != nil {
+		return models.User{}, constants.InternalServerError, err
+	}
+
+	defaultRole, err := s.getSpecificRole("user")
+	if err != nil {
+		return models.User{}, constants.InternalServerError, err
+	}
+	userRole.UserID = userNew.ID
+	userRole.RoleID = defaultRole.ID
+	userRole.AssignedAt = time.Now()
+	err = s.userRoleRepository.AssignRole(userRole)
+	if err != nil {
+		return models.User{}, constants.InternalServerError, err
+	}
+
+	return userNew, constants.SuccessCreate, nil
+}
+
 // Helper functions
 func containsAt(s string) bool {
 	for _, c := range s {
@@ -488,6 +563,18 @@ func joinBySpace(s []string) string {
 			result += " "
 		}
 		result += part
+	}
+	return result
+}
+
+func toLower(s string) string {
+	result := ""
+	for _, c := range s {
+		if c >= 'A' && c <= 'Z' {
+			result += string(c + 32)
+		} else {
+			result += string(c)
+		}
 	}
 	return result
 }
@@ -1109,4 +1196,157 @@ func TestAppHasAdministrator_NegativeCase(t *testing.T) {
 	result := service.AppHasAdministrator()
 
 	assert.False(t, result)
+}
+
+// TestRegisterUser_PositiveCase1_WithEmail tests successful user registration with email
+func TestRegisterUser_PositiveCase1_WithEmail(t *testing.T) {
+	service, mockHelper := newTestAuthorizationsService()
+
+	username := "johndoe"
+	timezone := "Asia/Jakarta"
+	language := "en"
+	userRequest := types.RegisterUserRequest{
+		Username: &username,
+		Email:    "john@example.com",
+		Password: "password123",
+		FullName: "John Doe",
+		Timezone: &timezone,
+		Language: &language,
+	}
+
+	userRole := models.Role{
+		ID:   "role-user",
+		Name: "user",
+	}
+
+	service.userRepository.On("GetByUsername", "johndoe").Return(models.User{}, gorm.ErrRecordNotFound)
+	service.userRepository.On("GetByEmail", "john@example.com").Return(models.User{}, gorm.ErrRecordNotFound)
+	mockHelper.On("HashPassword", "password123").Return("hashedpassword", nil)
+	service.userRepository.On("Create", mock.AnythingOfType("*models.User")).Return(nil)
+	mockHelper.On("DefaultValue", &timezone, constants.DEFAULT_TIMEZONE).Return("Asia/Jakarta")
+	mockHelper.On("DefaultValue", &language, constants.DEFAULT_LOCALE).Return("en")
+	service.userProfileRepository.On("Create", mock.AnythingOfType("*models.UserProfile")).Return(nil)
+	service.roleRepository.On("GetByName", "user").Return(userRole, nil)
+	service.userRoleRepository.On("AssignRole", mock.AnythingOfType("models.UserRole")).Return(nil)
+
+	user, code, err := service.RegisterUser(userRequest)
+
+	assert.NoError(t, err)
+	assert.Equal(t, constants.SuccessCreate, code)
+	assert.Equal(t, "johndoe", user.Username)
+	assert.Equal(t, "john@example.com", user.Email)
+	assert.True(t, user.IsActive)
+	assert.False(t, user.EmailVerified)
+}
+
+// TestRegisterUser_PositiveCase2_WithPhone tests successful user registration with phone number
+func TestRegisterUser_PositiveCase2_WithPhone(t *testing.T) {
+	service, mockHelper := newTestAuthorizationsService()
+
+	userRequest := types.RegisterUserRequest{
+		Phone:    "+628123456789",
+		Password: "securepass",
+		FullName: "Jane Smith",
+	}
+
+	userRole := models.Role{
+		ID:   "role-user",
+		Name: "user",
+	}
+
+	mockHelper.On("NormalizePhone", "+628123456789").Return("628123456789")
+	service.userRepository.On("GetByPhone", "628123456789").Return(models.User{}, gorm.ErrRecordNotFound)
+	mockHelper.On("HashPassword", "securepass").Return("hashedpass", nil)
+	service.userRepository.On("Create", mock.AnythingOfType("*models.User")).Return(nil)
+	mockHelper.On("DefaultValue", (*string)(nil), constants.DEFAULT_TIMEZONE).Return(constants.DEFAULT_TIMEZONE)
+	mockHelper.On("DefaultValue", (*string)(nil), constants.DEFAULT_LOCALE).Return(constants.DEFAULT_LOCALE)
+	service.userProfileRepository.On("Create", mock.AnythingOfType("*models.UserProfile")).Return(nil)
+	service.roleRepository.On("GetByName", "user").Return(userRole, nil)
+	service.userRoleRepository.On("AssignRole", mock.AnythingOfType("models.UserRole")).Return(nil)
+
+	user, code, err := service.RegisterUser(userRequest)
+
+	assert.NoError(t, err)
+	assert.Equal(t, constants.SuccessCreate, code)
+	assert.Equal(t, "628123456789", user.Username)
+	assert.True(t, user.IsActive)
+	assert.False(t, user.EmailVerified)
+}
+
+// TestRegisterUser_NegativeCase_DuplicateEmail tests failed registration when email already exists
+func TestRegisterUser_NegativeCase_DuplicateEmail(t *testing.T) {
+	service, _ := newTestAuthorizationsService()
+
+	username := "newuser"
+	userRequest := types.RegisterUserRequest{
+		Username: &username,
+		Email:    "existing@example.com",
+		Password: "password123",
+		FullName: "New User",
+	}
+
+	existingUser := models.User{
+		ID:    "existing-user-id",
+		Email: "existing@example.com",
+	}
+
+	service.userRepository.On("GetByUsername", "newuser").Return(models.User{}, gorm.ErrRecordNotFound)
+	service.userRepository.On("GetByEmail", "existing@example.com").Return(existingUser, nil)
+
+	user, code, err := service.RegisterUser(userRequest)
+
+	assert.Error(t, err)
+	assert.Equal(t, constants.ValidationError, code)
+	assert.Empty(t, user.ID)
+	assert.Contains(t, err.Error(), "email already registered")
+}
+
+// TestRegisterUser_NegativeCase_DuplicateUsername tests failed registration when username already exists
+func TestRegisterUser_NegativeCase_DuplicateUsername(t *testing.T) {
+	service, _ := newTestAuthorizationsService()
+
+	username := "existinguser"
+	userRequest := types.RegisterUserRequest{
+		Username: &username,
+		Email:    "new@example.com",
+		Password: "password123",
+		FullName: "New User",
+	}
+
+	existingUser := models.User{
+		ID:       "existing-user-id",
+		Username: "existinguser",
+	}
+
+	service.userRepository.On("GetByUsername", "existinguser").Return(existingUser, nil)
+
+	user, code, err := service.RegisterUser(userRequest)
+
+	assert.Error(t, err)
+	assert.Equal(t, constants.ValidationError, code)
+	assert.Empty(t, user.ID)
+	assert.Contains(t, err.Error(), "username already registered")
+}
+
+// TestRegisterUser_NegativeCase_HashPasswordFails tests failed registration when password hashing fails
+func TestRegisterUser_NegativeCase_HashPasswordFails(t *testing.T) {
+	service, mockHelper := newTestAuthorizationsService()
+
+	username := "testuser"
+	userRequest := types.RegisterUserRequest{
+		Username: &username,
+		Email:    "test@example.com",
+		Password: "weakpass",
+		FullName: "Test User",
+	}
+
+	service.userRepository.On("GetByUsername", "testuser").Return(models.User{}, gorm.ErrRecordNotFound)
+	service.userRepository.On("GetByEmail", "test@example.com").Return(models.User{}, gorm.ErrRecordNotFound)
+	mockHelper.On("HashPassword", "weakpass").Return("", errors.New("hashing failed"))
+
+	user, code, err := service.RegisterUser(userRequest)
+
+	assert.Error(t, err)
+	assert.Equal(t, constants.InternalServerError, code)
+	assert.Empty(t, user.ID)
 }
