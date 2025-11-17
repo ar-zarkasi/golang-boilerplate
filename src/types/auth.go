@@ -8,3 +8,8 @@ type UserAuth struct {
 	Scope        *map[string]any `json:"scope"`
 	ExpireDate   string          `json:"expire_date"`
 }
+
+type CacheAuth struct {
+	Session   any    `json:"session"`
+	LongToken string `json:"long_token"`
+}

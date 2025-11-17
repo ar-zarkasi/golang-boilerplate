@@ -17,6 +17,7 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 package main
 
 import (
@@ -33,11 +34,13 @@ func main() {
 	h := helpers.NewHelpers()
 	if err := h.InitializeSystem(); err != nil {
 		h.ErrorFatal(err)
+		return
 	}
+	h.SetupLogging()
 
 	// Check if running as console command
 	// Only treat as console command if there are args and they're not just the binary name
-	if len(os.Args) > 1 && !isWebServerMode(os.Args[1]) {
+	if len(os.Args) > 1 && !isWebServerMode(os.Args[1], h) {
 		// Setup and run console commands
 		kernel := console.RegisterCommands(h)
 		kernel.Run(os.Args)
@@ -50,23 +53,18 @@ func main() {
 	}
 
 	// Start the server
-	release := os.Getenv("GIN_MODE") == "release"
-	mainRouter := router.SetupRoutes()
+	mainRouter := router.SetupRoutes(h)
 	host := os.Getenv("HOST")
 	if host == "" {
-		host = "localhost"
-	}
-	serverAddr := host + ":" + port
-
-	if release {
-		docs.SwaggerInfo.Host = host
-	} else {
-		docs.SwaggerInfo.Host = serverAddr
+		host = "localhost:" + port
 	}
 
-	log.Printf("Server running on %s", serverAddr)
+	docs.SwaggerInfo.Host = host
+	log.Printf("Server running on 0.0.0.0:%s", port)
+	log.Printf("Accessible at: http://%s", host)
 
-	err := mainRouter.Run(":" + port)
+	// Bind to 0.0.0.0 to accept connections from outside the container
+	err := mainRouter.Run("0.0.0.0:" + port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -74,7 +72,7 @@ func main() {
 
 // isWebServerMode checks if we should start in web server mode
 // Returns true if the argument looks like it's not a console command
-func isWebServerMode(arg string) bool {
+func isWebServerMode(arg string, h helpers.HelperInterface) bool {
 	// If it ends with .go, it's from hot reload tools like gin/air
 	if len(arg) >= 3 && arg[len(arg)-3:] == ".go" {
 		return true
@@ -107,18 +105,9 @@ func isWebServerMode(arg string) bool {
 
 	// Check if it's a known command by seeing if it contains path separators
 	// If it has path separators, it's likely a binary path (web server mode)
-	if len(arg) > 0 && (arg[0] == '/' || arg[0] == '.' || contains(arg, "/") || contains(arg, "\\")) {
+	if len(arg) > 0 && (arg[0] == '/' || arg[0] == '.' || h.ContainString(arg, "/") || h.ContainString(arg, "\\")) {
 		return true
 	}
 
-	return false
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
 	return false
 }

@@ -8,13 +8,13 @@ import (
 )
 
 type UserSession struct {
-	ID           string    `gorm:"primaryKey;type:uuid"`
-	UserID       string    `gorm:"not null;type:uuid"`
-	SessionToken string    `gorm:"unique;not null;size:255"`
-	RefreshToken string    `gorm:"unique;size:255"`
-	IPAddress    string    `gorm:"type:inet"`
-	UserAgent    string    `gorm:"type:text"`
-	ExpiresAt    time.Time `gorm:"not null"`
+	ID           string    `gorm:"primaryKey;type:char(36)"`
+	UserID       string    `gorm:"not null;type:char(36);index"`
+	SessionToken string    `gorm:"unique;not null;type:varchar(512)"`
+	RefreshToken string    `gorm:"unique;not null;type:varchar(255)"`
+	IPAddress    *string   `gorm:"type:varchar(45);default:null"`
+	UserAgent    *string   `gorm:"type:text"`
+	ExpiresAt    time.Time `gorm:"not null;index"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 

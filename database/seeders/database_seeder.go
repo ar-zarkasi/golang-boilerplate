@@ -19,7 +19,6 @@ func NewDatabaseSeeder() *DatabaseSeeder {
 	// The order matters! For example, roles must be seeded before user_roles
 	registry.Register(&RoleSeeder{})
 	// Add other seeders here
-	// registry.Register(&UserSeeder{})
 	// registry.Register(&PostSeeder{})
 
 	return &DatabaseSeeder{

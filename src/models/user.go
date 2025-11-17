@@ -8,9 +8,9 @@ import (
 )
 
 type User struct {
-	ID              string     `gorm:"primaryKey;type:uuid"`
+	ID              string     `gorm:"primaryKey;type:char(36)"`
 	Username        string     `gorm:"unique;not null;size:100"`
-	Email           string     `gorm:"unique;size:250"`
+	Email           string     `gorm:"unique;null;size:250"`
 	Phone           string     `gorm:"unique;size:23"`
 	PasswordHash    string     `gorm:"not null;size:255"`
 	IsActive        bool       `gorm:"default:true"`

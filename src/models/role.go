@@ -10,11 +10,11 @@ import (
 )
 
 type Role struct {
-	ID           string      `gorm:"primaryKey;type:uuid"`
+	ID           string      `gorm:"primaryKey;type:char(36)"`
 	Name         string      `gorm:"not null;size:100"`
 	Description  string      `gorm:"type:text"`
 	IsSystemRole bool        `gorm:"default:false"`
-	Permissions  types.JSONB `gorm:"type:jsonb"`
+	Permissions  types.JSONB `gorm:"null;type:longtext"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    gorm.DeletedAt `gorm:"index"`

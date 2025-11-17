@@ -8,8 +8,8 @@ import (
 )
 
 type UserProfile struct {
-	ID        string  `gorm:"primaryKey;type:uuid"`
-	UserID    string  `gorm:"unique;not null;type:uuid"`
+	ID        string  `gorm:"primaryKey;type:char(36)"`
+	UserID    string  `gorm:"unique;not null;type:char(36)"`
 	FirstName string  `gorm:"size:100"`
 	LastName  string  `gorm:"size:100"`
 	AvatarURL *string `gorm:"null;type:text"`
