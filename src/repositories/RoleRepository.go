@@ -1,40 +1,44 @@
 package repository
 
 import (
-	"context"
 	"errors"
 
-	"app/src/connections"
-	"app/src/helpers"
 	"app/src/models"
 
 	"gorm.io/gorm"
 )
 
 type RoleRepository interface {
-	Create(role models.Role) (models.Role, error)
+	BaseRepository[models.Role]
+
 	GetByID(id string) (models.Role, error)
-	GetSystemRoles(ctx context.Context) ([]models.Role, error)
+	GetSystemRoles() ([]models.Role, error)
 	GetByName(name string) (models.Role, error)
-	Update(role models.Role) error
-	Delete(id string) error
 	GetLists(lastDate string, limit int) ([]models.Role, error)
 }
 
 type roleRepository struct {
-	db connections.Database
+	BaseRepository[models.Role]
+	db *gorm.DB
 }
 
-func NewRoleRepository() RoleRepository {
-	helper := helpers.NewHelpers()
+func NewRoleRepository(db *gorm.DB) RoleRepository {
+	// Define the relationships to preload
+	relation := []string{
+		"UserRoles",
+		"UserRoles.User",
+		"UserRoles.Role",
+		"UserRoles.AssignedByUser",
+	}
 	return &roleRepository{
-		db: helper.GetDatabase(),
+		db:             db,
+		BaseRepository: NewBaseRepository(db, models.Role{}, relation),
 	}
 }
 
 func (r *roleRepository) GetLists(lastDate string, limit int) ([]models.Role, error) {
 	var roles []models.Role
-	query := r.db.DB().Model(&models.Role{})
+	query := r.db
 
 	if lastDate != "" {
 		query = query.Where("created_at > ?", lastDate)
@@ -46,16 +50,9 @@ func (r *roleRepository) GetLists(lastDate string, limit int) ([]models.Role, er
 	return roles, nil
 }
 
-func (r *roleRepository) Create(role models.Role) (models.Role, error) {
-	if err := r.db.DB().Create(&role).Error; err != nil {
-		return models.Role{}, err
-	}
-	return role, nil
-}
-
 func (r *roleRepository) GetByID(id string) (models.Role, error) {
 	var role models.Role
-	if err := r.db.DB().Where("id = ?", id).First(&role).Error; err != nil {
+	if err := r.db.Where("id = ?", id).First(&role).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return models.Role{}, nil
 		}
@@ -64,9 +61,9 @@ func (r *roleRepository) GetByID(id string) (models.Role, error) {
 	return role, nil
 }
 
-func (r *roleRepository) GetSystemRoles(ctx context.Context) ([]models.Role, error) {
+func (r *roleRepository) GetSystemRoles() ([]models.Role, error) {
 	var roles []models.Role
-	if err := r.db.DB().Where("is_system_role = ?", true).Find(&roles).Error; err != nil {
+	if err := r.db.Where("is_system_role = ?", true).Find(&roles).Error; err != nil {
 		return nil, err
 	}
 	return roles, nil
@@ -74,19 +71,11 @@ func (r *roleRepository) GetSystemRoles(ctx context.Context) ([]models.Role, err
 
 func (r *roleRepository) GetByName(name string) (models.Role, error) {
 	var role models.Role
-	if err := r.db.DB().Where("(is_system_role = ?) AND name = ?", true, name).First(&role).Error; err != nil {
+	if err := r.db.Where("(is_system_role = ?) AND name = ?", true, name).First(&role).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return models.Role{}, nil
 		}
 		return models.Role{}, err
 	}
 	return role, nil
-}
-
-func (r *roleRepository) Update(role models.Role) error {
-	return r.db.DB().Save(&role).Error
-}
-
-func (r *roleRepository) Delete(id string) error {
-	return r.db.DB().Delete(&models.Role{}, "id = ?", id).Error
 }

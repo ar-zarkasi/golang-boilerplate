@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"log"
 	"strconv"
 	"time"
 
@@ -25,11 +26,13 @@ type redisWrapper struct {
 
 func NewRedis(cfg types.MainConfig) Redis {
 	client := redis.NewClient(&redis.Options{
-		Addr:     cfg.Redis.Host + ":" + strconv.Itoa(cfg.Redis.Port),
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
+		Addr:            cfg.Redis.Host + ":" + strconv.Itoa(cfg.Redis.Port),
+		Password:        cfg.Redis.Password,
+		DB:              cfg.Redis.DB,
+		DisableIndentity: true, // Disable client info for Redis < 7.2 compatibility
 	})
 
+	log.Printf("Redis Connected to host tcp://%s", client.Options().Addr)
 	return &redisWrapper{
 		client: client,
 		ctx:    context.Background(),

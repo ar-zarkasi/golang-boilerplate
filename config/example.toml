@@ -78,3 +78,7 @@ bucket_name = "my-app-bucket"
 # secret_access_key = "minioadmin"
 # use_ssl = false
 # bucket_name = "my-bucket"
+
+## Application Config
+[APP]
+app_key = "32 byte secure random string"

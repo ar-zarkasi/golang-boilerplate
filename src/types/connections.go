@@ -74,4 +74,7 @@ type MainConfig struct {
 		UseSSL          bool       `toml:"use_ssl"`
 		BucketName      string     `toml:"bucket_name"`
 	} `toml:"s3"`
+	App struct {
+		AppKey string `toml:"app_key"` // 32 byte secure random string
+	} `toml:"app"`
 }

@@ -1,83 +1,59 @@
 package router
 
 import (
-	"app/src/constants"
-	"app/src/controllers"
 	"app/src/helpers"
-	"app/src/middlewares"
-	"app/src/services"
-	"app/src/types"
-	"os"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func SetupRoutes() *gin.Engine {
-	helper := helpers.NewHelpers()
+func SetupRoutes(helper helpers.HelperInterface) *gin.Engine {
 	config := helper.GetMainConfig()
 	// setup GIN & Cors
 	routers := gin.Default()
 	routers.SetTrustedProxies(nil)
-	mode := os.Getenv("GIN_MODE")
 	configCors := cors.Config{
-		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Realm"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
-	if mode == "release" {
-		configCors.AllowAllOrigins = false
+	if helper.IsProduction() {
 		configCors.AllowOrigins = strings.Split(config.Cors.AllowedUrl, ",")
+	} else {
+		// In development, allow common localhost ports for Podman/Docker
+		configCors.AllowOrigins = []string{
+			"http://localhost",
+			"http://localhost:7007",
+			"http://localhost:5000",
+			"http://localhost:3000",
+			"http://127.0.0.1",
+			"http://127.0.0.1:7007",
+			"http://127.0.0.1:5000",
+			"http://127.0.0.1:3000",
+		}
 	}
 
 	routers.Use(cors.New(configCors))
 
-	// Initialize services
-	authService := services.NewAuthorizationService()
-	// Initialize controllers
-	authController := controllers.NewAuthController(authService)
-	// Initialize middleware
-	userLoggedIn := middlewares.NewAuthMiddleware(authService)
-
-	routers.GET("/", func(c *gin.Context) {
-		version := os.Getenv("VERSION")
-		if version == "" {
-			version = "1.0.0" // Default version if not set
-		}
-		response := types.ResponseDefault{
-			Status: true,
-			Code:   constants.Success,
-			Data: map[string]string{
-				"version": version,
-			},
-			Message: "Golang Boilerplate for Microservices",
-		}
-		helper.SendResponse(c, response)
+	// Add request timeout middleware (30 seconds)
+	routers.Use(func(c *gin.Context) {
+		// Set a reasonable read timeout for the request body
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10*1024*1024) // 10MB max
+		c.Next()
 	})
-	routers.NoRoute(func(ctx *gin.Context) {
-		helper.ErrorResponse(ctx, constants.NotFound, helper.ErrorMessage(constants.NotFound))
-	})
-	routers.GET("/documentation/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Auth routes
-	v1router := routers.Group("/v1")
-	{
-		v1router.POST("/login", authController.SignIn)
-		v1router.POST("/register", authController.SignUp)
-		v1router.GET("/logout", authController.SignOut, userLoggedIn.ValidatingToken())
-		v1router.GET("/refresh", authController.RefreshToken, userLoggedIn.ValidateRefreshToken())
-		v1UserRouter := v1router.Group("/user")
-		{
-			v1UserRouter.GET("/roles", authController.ListRoles, userLoggedIn.ValidatingToken())
-		}
-	}
+	// Initialize dependencies
+	dep := NewDependenciesApp(helper)
+	dep.RegisterControllers()
+	dep.RegisterMiddlewares()
+
+	r := NewApiRouter(helper, routers)
+	routers = r.RegisterRoutes()
 
 	return routers
 }

@@ -3,50 +3,44 @@ package repository
 import (
 	"errors"
 
-	"app/src/connections"
-	"app/src/helpers"
 	"app/src/models"
 
 	"gorm.io/gorm"
 )
 
 type UserSessionRepository interface {
-	Create(session models.UserSession) (models.UserSession, error)
+	BaseRepository[models.UserSession]
+	GetByID(ID string) (*models.UserSession, error)
 	GetByToken(token string) (models.UserSession, error)
 	GetByRefreshToken(refreshToken string) (models.UserSession, error)
-	GetByUserID(userID string) ([]models.UserSession, error)
-	Update(session models.UserSession) error
-	Delete(id string) error
+	GetByUserID(userID string) (*models.UserSession, error)
 	DeleteByToken(token string) error
 	DeleteExpired() error
 	DeleteUserSessions(userID string) error
 }
 
 type userSessionRepository struct {
-	db connections.Database
+	BaseRepository[models.UserSession]
+	db *gorm.DB
 }
 
-func NewUserSessionRepository() UserSessionRepository {
-	helper := helpers.NewHelpers()
+func NewUserSessionRepository(db *gorm.DB) UserSessionRepository {
+	// Define the relationships to preload
+	relation := []string{
+		"User",
+		"User.Profile",
+		"User.UserRoles",
+		"User.UserRoles.Role",
+	}
 	return &userSessionRepository{
-		db: helper.GetDatabase(),
+		db:             db,
+		BaseRepository: NewBaseRepository(db, models.UserSession{}, relation),
 	}
-}
-
-func (r *userSessionRepository) getBaseQuery() *gorm.DB {
-	return r.db.DB().Preload("User").Preload("User.Profile").Preload("User.UserRoles.Role")
-}
-
-func (r *userSessionRepository) Create(session models.UserSession) (models.UserSession, error) {
-	if err := r.db.DB().Create(&session).Error; err != nil {
-		return models.UserSession{}, err
-	}
-	return session, nil
 }
 
 func (r *userSessionRepository) GetByToken(token string) (models.UserSession, error) {
 	var session models.UserSession
-	if err := r.getBaseQuery().Where("session_token = ? AND expires_at > CURRENT_TIMESTAMP", token).First(&session).Error; err != nil {
+	if err := r.BaseQuery().Where("session_token = ? AND expires_at > CURRENT_TIMESTAMP", token).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return models.UserSession{}, nil
 		}
@@ -57,7 +51,7 @@ func (r *userSessionRepository) GetByToken(token string) (models.UserSession, er
 
 func (r *userSessionRepository) GetByRefreshToken(refreshToken string) (models.UserSession, error) {
 	var session models.UserSession
-	if err := r.getBaseQuery().Where("refresh_token = ?", refreshToken).First(&session).Error; err != nil {
+	if err := r.BaseQuery().Where("refresh_token = ?", refreshToken).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return models.UserSession{}, nil
 		}
@@ -66,30 +60,30 @@ func (r *userSessionRepository) GetByRefreshToken(refreshToken string) (models.U
 	return session, nil
 }
 
-func (r *userSessionRepository) GetByUserID(userID string) ([]models.UserSession, error) {
-	var sessions []models.UserSession
-	if err := r.getBaseQuery().Where("user_id = ? AND expires_at > CURRENT_TIMESTAMP", userID).Find(&sessions).Error; err != nil {
+func (r *userSessionRepository) GetByID(ID string) (*models.UserSession, error) {
+	var session models.UserSession
+	if err := r.BaseQuery().Where("id = ?", ID).First(&session).Error; err != nil {
 		return nil, err
 	}
-	return sessions, nil
+	return &session, nil
 }
 
-func (r *userSessionRepository) Update(session models.UserSession) error {
-	return r.db.DB().Save(&session).Error
-}
-
-func (r *userSessionRepository) Delete(id string) error {
-	return r.db.DB().Delete(&models.UserSession{}, "id = ?", id).Error
+func (r *userSessionRepository) GetByUserID(userID string) (*models.UserSession, error) {
+	var session models.UserSession
+	if err := r.BaseQuery().Where("user_id = ? AND expires_at > CURRENT_TIMESTAMP", userID).Order("updated_at DESC").First(&session).Error; err != nil {
+		return nil, err
+	}
+	return &session, nil
 }
 
 func (r *userSessionRepository) DeleteByToken(token string) error {
-	return r.db.DB().Delete(&models.UserSession{}, "session_token = ?", token).Error
+	return r.db.Delete(&models.UserSession{}, "session_token = ?", token).Error
 }
 
 func (r *userSessionRepository) DeleteExpired() error {
-	return r.db.DB().Delete(&models.UserSession{}, "expires_at <= CURRENT_TIMESTAMP").Error
+	return r.db.Delete(&models.UserSession{}, "expires_at <= CURRENT_TIMESTAMP").Error
 }
 
 func (r *userSessionRepository) DeleteUserSessions(userID string) error {
-	return r.db.DB().Delete(&models.UserSession{}, "user_id = ?", userID).Error
+	return r.db.Delete(&models.UserSession{}, "user_id = ?", userID).Error
 }

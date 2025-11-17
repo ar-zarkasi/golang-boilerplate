@@ -8,11 +8,11 @@ import (
 )
 
 type UserRole struct {
-	ID         string    `gorm:"primaryKey;type:uuid"`
-	UserID     string    `gorm:"not null;type:uuid"`
-	RoleID     string    `gorm:"not null;type:uuid"`
-	AssignedBy *string   `gorm:"type:uuid"`
-	AssignedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+	ID         string    `gorm:"primaryKey;type:char(36)"`
+	UserID     string    `gorm:"not null;type:char(36)"`
+	RoleID     string    `gorm:"not null;type:char(36)"`
+	AssignedBy *string   `gorm:"null;type:char(36)"`
+	AssignedAt time.Time `gorm:"autoCreateTime"`
 	ExpiresAt  *time.Time
 
 	// Relationships

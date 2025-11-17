@@ -6,6 +6,22 @@ import (
 	"errors"
 )
 
+// FilterQuery represents a filter condition for database queries
+// @Description Filter query object for filtering data
+type FilterQuery struct {
+	Column     string   `json:"column" example:"name"`                           // Column name to filter on
+	Operand    string   `json:"operand" example:"like" enums:"=,!=,>,<,>=,<=,like,in,not_in,is_null,is_not_null"` // Operator for the filter
+	Value      *string  `json:"value" example:"admin"`                           // Single value for the filter (used with =, !=, >, <, >=, <=, like)
+	ValueArray []string `json:"value_array" example:"admin,user"`                // Array of values (used with in, not_in)
+}
+
+type SORTING string
+
+const (
+	SORTING_ASC  SORTING = "asc"
+	SORTING_DESC SORTING = "desc"
+)
+
 type JSONB map[string]interface{}
 
 // Value implements the driver.Valuer interface for JSONB

@@ -11,6 +11,7 @@ import (
 )
 
 type HelperInterface interface {
+	IsProduction() bool
 	MakeRequest(method string, url string, params any) ([]byte, error)
 	GetLastHeaderResponse() *http.Header
 	GetLastStatusCode() int
@@ -32,11 +33,13 @@ type HelperInterface interface {
 	GetBoolValue(ptr *bool) string
 	JSONToStruct(data []byte, v interface{}) error
 	StructToJSON(v interface{}) ([]byte, error)
+	InterfaceToStruct(data any, v interface{}) error
 	SendResponse(ctx *gin.Context, response types.ResponseDefault)
+	SendResponseData(ctx *gin.Context, code int, message string, data any)
 	GenerateRandomLabel(prefix string, n int) string
 	FormatSize(bytes int64) string
-	Encrypt(plaintext []byte, key string) (string, error)
-	Decrypt(ciphertextBase64 string, key string) ([]byte, error)
+	Encrypt(plaintext []byte, key *string) (string, error)
+	Decrypt(ciphertextBase64 string, key *string) ([]byte, error)
 	Unpad(src []byte) []byte
 	ZeroUnpad(data []byte) []byte
 	GetMainConfig() types.MainConfig
@@ -55,15 +58,19 @@ type HelperInterface interface {
 	NormalizePhone(phonestring string) string
 	DefaultValue(ptr *string, defaultValue string) string
 	GetTimeProvider() TimeProvider
-	CheckValidationRequest(ctx *gin.Context, request any) error
+	GenerateJWTToken(payLoad any, expires time.Time) (string, error)
+	ParsingJWT(token string, payload interface{}) error
+	FormatValidationError(err error) string
+	SetupLogging()
+	ContainString(s, substr string) bool
 }
 
 type Helpers struct {
-	timeProvider TimeProvider
+	TimeHelper TimeProvider
 }
 
 func NewHelpers() HelperInterface {
 	return &Helpers{
-		timeProvider: &DefaultTimeProvider{},
+		TimeHelper: &DefaultTimeProvider{},
 	}
 }

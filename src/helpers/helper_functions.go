@@ -26,6 +26,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,6 +45,10 @@ var (
 	s3Client           connections.S3Client
 )
 
+func (h *Helpers) IsProduction() bool {
+	release := os.Getenv("GIN_MODE")
+	return release == "release"
+}
 func (h *Helpers) SetBaseUrl(url string) {
 	baseURL = url
 }
@@ -206,6 +212,8 @@ func (h *Helpers) InitializeSystem() error {
 		if err == nil {
 			log.Println("RabbitMQ initialized successfully")
 		}
+	default:
+		log.Println("Not Using Message Broker [DONE]")
 	}
 
 	if config.S3.Provider != "" {
@@ -227,20 +235,36 @@ func (h *Helpers) GetS3Client() connections.S3Client {
 	return s3Client
 }
 func (h *Helpers) SetCache(key string, value any, ttl int) error {
-	data, err := json.Marshal(value)
+	data, err := h.StructToJSON(value)
 	if err != nil {
 		return err
 	}
 	timeProvider := &DefaultTimeProvider{}
 	timeout := timeProvider.IntToDuration(ttl)
-	return redisClient.Set(key, data, timeout)
+	if h.IsProduction() {
+		data, err := h.Encrypt(data, nil)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		return redisClient.Set(key, data, timeout)
+	}
+	return redisClient.Set(key, string(data), timeout)
 }
 func (h *Helpers) GetCache(key string) (*string, error) {
 	data, err := redisClient.Get(key)
 	if err != nil {
 		return nil, err
 	}
-	// convert string to any
+
+	if h.IsProduction() {
+		decryptedData, err := h.Decrypt(data, nil)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		data = string(decryptedData)
+	}
 	return &data, nil
 }
 func (h *Helpers) DeleteCache(key string) error {
@@ -302,10 +326,8 @@ func (h *Helpers) GetDefaultLimitData() int {
 		config types.MainConfig
 	)
 	_ = h.LoadConfig(&config)
-	limit = config.BulkData.LimitData
-	if limit <= 0 {
-		limit = constants.DEFAULT_LIMIT_DATA
-	}
+	limit = constants.DEFAULT_LIMIT_DATA
+
 	return limit
 }
 func (h *Helpers) ErrorFatal(err error) {
@@ -359,6 +381,17 @@ func (h *Helpers) JSONToStruct(data []byte, v interface{}) error {
 func (h *Helpers) StructToJSON(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
+func (h *Helpers) InterfaceToStruct(data any, v interface{}) error {
+	if data == nil {
+		return fmt.Errorf("data cannot be nil")
+	}
+	temp, err := h.StructToJSON(data)
+	if err != nil {
+		return err
+	}
+
+	return h.JSONToStruct(temp, v)
+}
 func (h *Helpers) SendResponse(ctx *gin.Context, response types.ResponseDefault) {
 	ctx.JSON(response.Code, response)
 }
@@ -388,8 +421,12 @@ func (h *Helpers) FormatSize(bytes int64) string {
 		return fmt.Sprintf("%d Bytes", bytes)
 	}
 }
-func (h *Helpers) Encrypt(plaintext []byte, key string) (string, error) {
-	keyBytes := []byte(key)
+func (h *Helpers) Encrypt(plaintext []byte, key *string) (string, error) {
+	if key == nil {
+		keyConfig := h.GetMainConfig().App.AppKey
+		key = &keyConfig
+	}
+	keyBytes := []byte(*key)
 
 	// generate iv 16 bytes
 	ivBytes := make([]byte, 16)
@@ -426,13 +463,18 @@ func (h *Helpers) Encrypt(plaintext []byte, key string) (string, error) {
 	ivCiphertext := append(ivBytes, []byte(base64Ciphertext)...)
 	return base64.StdEncoding.EncodeToString(ivCiphertext), nil
 }
-func (h *Helpers) Decrypt(ciphertextBase64 string, key string) ([]byte, error) {
-	if len(key) != 32 {
+func (h *Helpers) Decrypt(ciphertextBase64 string, key *string) ([]byte, error) {
+	if key == nil {
+		keyConfig := h.GetMainConfig().App.AppKey
+		key = &keyConfig
+	}
+
+	if len(*key) != 32 {
 		err := errors.New("APP_KEY must be 32 bytes long for AES-256")
 		return nil, err
 	}
 	// Create a new AES cipher
-	block, err := aes.NewCipher([]byte(key))
+	block, err := aes.NewCipher([]byte(*key))
 	if err != nil {
 		log.Printf("Error creating cipher: %v\n", err)
 		return nil, err
@@ -566,7 +608,8 @@ func (h *Helpers) ReadJSONFile(filePath string, target interface{}) error {
 	return json.Unmarshal(data, target)
 }
 func (h *Helpers) HashPassword(password string) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MaxCost)
+	const cost = 12
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return string(hashed), err
 }
 func (h *Helpers) VerifyPassword(hashedPassword, password string) bool {
@@ -645,13 +688,169 @@ func (h *Helpers) DefaultValue(ptr *string, defaultValue string) string {
 	return *ptr
 }
 func (h *Helpers) GetTimeProvider() TimeProvider {
-	return h.timeProvider
+	return h.TimeHelper
 }
-func (h *Helpers) CheckValidationRequest(ctx *gin.Context, request any) error {
-	if request == nil {
-		return fmt.Errorf("request cannot be empty")
+
+func (h *Helpers) GenerateJWTToken(payLoad any, expires time.Time) (string, error) {
+	key := h.GetMainConfig().App.AppKey
+
+	payloadJSON, err := h.StructToJSON(payLoad)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert payload to JSON: %w", err)
 	}
-	err := ctx.ShouldBindJSON(&request)
+	payloadEncrypt, err := h.Encrypt(payloadJSON, &key)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt payload: %w. %s", err, key)
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"data": payloadEncrypt,
+		"exp":  expires.Unix(),
+	})
+	signedToken, err := token.SignedString([]byte(key))
+
+	return signedToken, err
+}
+
+func (h *Helpers) ParsingJWT(token string, payload interface{}) error {
+	key := h.GetMainConfig().App.AppKey
+	tokenjwt, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signin method")
+		}
+		return []byte(key), nil
+	})
+	if err != nil || !tokenjwt.Valid {
+		return fmt.Errorf("unauthorized User")
+	}
+
+	claims := tokenjwt.Claims.(jwt.MapClaims)
+	payloadEncrypt := claims["data"]
+	payloadDecrypt, err := h.Decrypt(payloadEncrypt.(string), &key)
+	if err != nil {
+		return err
+	}
+	err = h.JSONToStruct(payloadDecrypt, &payload)
 
 	return err
+}
+func (h *Helpers) SendResponseData(ctx *gin.Context, code int, message string, data any) {
+	response := types.ResponseDefault{
+		Status:  true,
+		Code:    code,
+		Data:    data,
+		Message: message,
+	}
+	h.SendResponse(ctx, response)
+}
+
+// FormatValidationError converts validator errors to user-friendly messages
+func (h *Helpers) FormatValidationError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Check if it's a validator.ValidationErrors type
+	var validationErrs validator.ValidationErrors
+	if errors.As(err, &validationErrs) {
+		// Get the first error
+		if len(validationErrs) > 0 {
+			firstErr := validationErrs[0]
+			fieldName := firstErr.Field()
+			tag := firstErr.Tag()
+			param := firstErr.Param()
+
+			// Convert field name to lowercase for better readability
+			friendlyFieldName := h.toFriendlyFieldName(fieldName)
+
+			// Generate dynamic error messages based on validation tag
+			switch tag {
+			case "required":
+				return fmt.Sprintf("%s is required", friendlyFieldName)
+			case "email":
+				return fmt.Sprintf("%s must be a valid email address", friendlyFieldName)
+			case "min":
+				return fmt.Sprintf("%s must be at least %s characters", friendlyFieldName, param)
+			case "max":
+				return fmt.Sprintf("%s must not exceed %s characters", friendlyFieldName, param)
+			case "eqfield":
+				// Get the field it should equal to
+				paramFieldName := h.toFriendlyFieldName(param)
+				return fmt.Sprintf("%s must match %s", friendlyFieldName, paramFieldName)
+			case "required_without":
+				paramFieldName := h.toFriendlyFieldName(param)
+				return fmt.Sprintf("Either %s or %s is required", friendlyFieldName, paramFieldName)
+			case "oneof":
+				return fmt.Sprintf("%s must be one of: %s", friendlyFieldName, param)
+			case "gt":
+				return fmt.Sprintf("%s must be greater than %s", friendlyFieldName, param)
+			case "gte":
+				return fmt.Sprintf("%s must be greater than or equal to %s", friendlyFieldName, param)
+			case "lt":
+				return fmt.Sprintf("%s must be less than %s", friendlyFieldName, param)
+			case "lte":
+				return fmt.Sprintf("%s must be less than or equal to %s", friendlyFieldName, param)
+			default:
+				return fmt.Sprintf("%s is invalid", friendlyFieldName)
+			}
+		}
+	}
+
+	// If not a validation error, return generic message
+	return "Invalid input data"
+}
+
+// toFriendlyFieldName converts CamelCase field names to friendly format
+// Example: "ConfirmPassword" -> "confirm password"
+func (h *Helpers) toFriendlyFieldName(fieldName string) string {
+	if fieldName == "" {
+		return ""
+	}
+
+	// Insert space before uppercase letters
+	var result strings.Builder
+	for i, char := range fieldName {
+		if i > 0 && char >= 'A' && char <= 'Z' {
+			result.WriteRune(' ')
+		}
+		result.WriteRune(char)
+	}
+
+	return strings.ToLower(result.String())
+}
+
+func (h *Helpers) SetupLogging() {
+	if h.IsProduction() {
+		// Create logs directory if it doesn't exist
+		logsDir := "logs"
+		if err := os.MkdirAll(logsDir, 0755); err != nil {
+			log.Fatalf("Failed to create logs directory: %v", err)
+		}
+
+		// Generate daily log filename with format: app-YYYY-MM-DD.log
+		logFileName := filepath.Join(logsDir, "app-"+time.Now().Format(constants.FORMAT_DATE)+".log")
+
+		// Open or create log file
+		logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalf("Failed to open log file: %v", err)
+		}
+
+		// Set log output to file
+		log.SetOutput(logFile)
+		log.Printf("Logging initialized in RELEASE mode - writing to file: %s", logFileName)
+	} else {
+		// Development mode: log to stdout (visible in podman logs)
+		log.SetOutput(os.Stdout)
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		log.Println("Logging initialized in DEVELOPMENT mode - writing to stdout")
+	}
+}
+
+func (h *Helpers) ContainString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

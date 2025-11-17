@@ -4,29 +4,25 @@ import (
 	"app/src/constants"
 	"app/src/helpers"
 	"app/src/services"
+	"log"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-type AuthenticationMiddleware interface {
-	ValidatingToken() gin.HandlerFunc
-	ValidateRefreshToken() gin.HandlerFunc
-}
-
-type authenticationMiddleware struct {
+type AuthenticationMiddleware struct {
 	helper helpers.HelperInterface
 	auth   services.AuthorizationsService
 }
 
-func NewAuthMiddleware(authInterface services.AuthorizationsService) AuthenticationMiddleware {
-	return &authenticationMiddleware{
+func NewAuthMiddleware(helper helpers.HelperInterface, authInterface services.AuthorizationsService) *AuthenticationMiddleware {
+	return &AuthenticationMiddleware{
+		helper: helper,
 		auth:   authInterface,
-		helper: helpers.NewHelpers(),
 	}
 }
 
-func (a *authenticationMiddleware) ValidatingToken() gin.HandlerFunc {
+func (a *AuthenticationMiddleware) ValidatingToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -46,22 +42,23 @@ func (a *authenticationMiddleware) ValidatingToken() gin.HandlerFunc {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// Validate the token
-		verified, err := a.auth.VerifyToken(token)
-		if err != nil {
+		var sessionID string
+		verified, err := a.auth.VerifyToken(token, &sessionID)
+		if err != nil || sessionID == "" {
 			a.helper.ErrorResponse(c, constants.Unauthorized, a.helper.ErrorMessage(constants.Unauthorized))
 			c.Abort()
 			return
 		}
 
 		// Set user as active and store in context
-		a.helper.SetUserActive(verified)
-		a.helper.SetUserToken(token)
 		c.Set("user", verified)
+		c.Set("token", token)
+		c.Set("session_id", sessionID)
 		c.Next()
 	}
 }
 
-func (a *authenticationMiddleware) ValidateRefreshToken() gin.HandlerFunc {
+func (a *AuthenticationMiddleware) ValidateRefreshToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -79,17 +76,19 @@ func (a *authenticationMiddleware) ValidateRefreshToken() gin.HandlerFunc {
 		}
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-
+		log.Printf("Token Here: %s\n", token)
 		// Validate the refresh token
-		valid, err := a.auth.VerifyRefreshToken(token)
-		if err != nil {
-			a.helper.ErrorResponse(c, constants.Unauthorized, a.helper.ErrorMessage(constants.Unauthorized))
+		var sessionID string
+		valid, err := a.auth.VerifyRefreshToken(token, &sessionID)
+		if err != nil || sessionID == "" {
+			a.helper.ErrorResponse(c, constants.Unauthorized, "Not authorized or invalid refresh token")
 			c.Abort()
 			return
 		}
-		a.helper.SetTokenActive(token)
-		a.helper.SetUserActive(valid)
 		c.Set("user", valid)
+		c.Set("refreshToken", token)
+		c.Set("session_id", sessionID)
+		log.Printf("Refresh token validated for user: %s\n Token Is : %s", valid.Username, token)
 		c.Next()
 	}
 }

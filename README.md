@@ -73,7 +73,6 @@ golang-boilerplate/
 │   └── seeders/          # Database seeders
 │       ├── database_seeder.go
 │       ├── role_seeder.go
-│       └── user_seeder.go
 ├── docs/                  # API documentation (Swagger)
 ├── src/                   # Source code
 │   ├── connections/       # Database & external connections
@@ -100,7 +99,7 @@ golang-boilerplate/
 │   │   ├── UserRepository.go
 │   │   ├── RoleRepository.go
 │   │   └── ...
-│   ├── router/            # Route definitions
+│   ├── router/            # Route definitions and dependency load
 │   ├── services/          # Business logic
 │   │   └── authorizations.go
 │   └── types/             # Type definitions
@@ -112,10 +111,7 @@ golang-boilerplate/
 │   │   ├── mock_helper.go
 │   │   └── mock_repositories.go
 │   └── services/          # Service tests
-│       ├── authorization_service_test.go
-│       ├── authorization_refresh_token_test.go
-│       ├── authorization_register_test.go
-│       └── authorization_verify_test.go
+│       ├── authorizations_test.go
 ├── dev.Dockerfile         # Development Dockerfile
 ├── prod.Dockerfile        # Production Dockerfile
 ├── go.mod                 # Go modules

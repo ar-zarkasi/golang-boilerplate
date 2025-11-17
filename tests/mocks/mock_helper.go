@@ -17,13 +17,24 @@ type MockHelperInterface struct {
 	mock.Mock
 }
 
+func (m *MockHelperInterface) IsProduction() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
 func (m *MockHelperInterface) MakeRequest(method string, url string, params any) ([]byte, error) {
 	args := m.Called(method, url, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]byte), args.Error(1)
 }
 
 func (m *MockHelperInterface) GetLastHeaderResponse() *http.Header {
 	args := m.Called()
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).(*http.Header)
 }
 
@@ -47,16 +58,25 @@ func (m *MockHelperInterface) GetDatabase() connections.Database {
 
 func (m *MockHelperInterface) GetKafka() connections.Kafka {
 	args := m.Called()
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).(connections.Kafka)
 }
 
 func (m *MockHelperInterface) GetRabbitMQ() connections.RabbitMQ {
 	args := m.Called()
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).(connections.RabbitMQ)
 }
 
 func (m *MockHelperInterface) GetS3Client() connections.S3Client {
 	args := m.Called()
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).(connections.S3Client)
 }
 
@@ -67,6 +87,9 @@ func (m *MockHelperInterface) SetCache(key string, value any, ttl int) error {
 
 func (m *MockHelperInterface) GetCache(key string) (*string, error) {
 	args := m.Called(key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*string), args.Error(1)
 }
 
@@ -120,11 +143,23 @@ func (m *MockHelperInterface) JSONToStruct(data []byte, v interface{}) error {
 
 func (m *MockHelperInterface) StructToJSON(v interface{}) ([]byte, error) {
 	args := m.Called(v)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockHelperInterface) InterfaceToStruct(data any, v interface{}) error {
+	args := m.Called(data, v)
+	return args.Error(0)
 }
 
 func (m *MockHelperInterface) SendResponse(ctx *gin.Context, response types.ResponseDefault) {
 	m.Called(ctx, response)
+}
+
+func (m *MockHelperInterface) SendResponseData(ctx *gin.Context, code int, message string, data any) {
+	m.Called(ctx, code, message, data)
 }
 
 func (m *MockHelperInterface) GenerateRandomLabel(prefix string, n int) string {
@@ -137,23 +172,32 @@ func (m *MockHelperInterface) FormatSize(bytes int64) string {
 	return args.String(0)
 }
 
-func (m *MockHelperInterface) Encrypt(plaintext []byte, key string) (string, error) {
+func (m *MockHelperInterface) Encrypt(plaintext []byte, key *string) (string, error) {
 	args := m.Called(plaintext, key)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockHelperInterface) Decrypt(ciphertextBase64 string, key string) ([]byte, error) {
+func (m *MockHelperInterface) Decrypt(ciphertextBase64 string, key *string) ([]byte, error) {
 	args := m.Called(ciphertextBase64, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]byte), args.Error(1)
 }
 
 func (m *MockHelperInterface) Unpad(src []byte) []byte {
 	args := m.Called(src)
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).([]byte)
 }
 
 func (m *MockHelperInterface) ZeroUnpad(data []byte) []byte {
 	args := m.Called(data)
+	if args.Get(0) == nil {
+		return nil
+	}
 	return args.Get(0).([]byte)
 }
 
@@ -240,7 +284,26 @@ func (m *MockHelperInterface) GetTimeProvider() helpers.TimeProvider {
 	return args.Get(0).(helpers.TimeProvider)
 }
 
-func (m *MockHelperInterface) CheckValidationRequest(ctx *gin.Context, request any) error {
-	args := m.Called(ctx, request)
+func (m *MockHelperInterface) GenerateJWTToken(payLoad any, expires time.Time) (string, error) {
+	args := m.Called(payLoad, expires)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockHelperInterface) ParsingJWT(token string, payload interface{}) error {
+	args := m.Called(token, payload)
 	return args.Error(0)
+}
+
+func (m *MockHelperInterface) FormatValidationError(err error) string {
+	args := m.Called(err)
+	return args.String(0)
+}
+
+func (m *MockHelperInterface) SetupLogging() {
+	m.Called()
+}
+
+func (m *MockHelperInterface) ContainString(s, substr string) bool {
+	args := m.Called(s, substr)
+	return args.Bool(0)
 }
