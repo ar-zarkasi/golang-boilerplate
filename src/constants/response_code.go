@@ -4,7 +4,8 @@ const (
 	NoCode              = 0
 	Success             = 200
 	SuccessCreate       = 201
-	Expired             = 204
+	SuccessNoContent    = 204
+	Expired             = 419
 	BadRequest          = 400
 	Unauthorized        = 401
 	Forbidden           = 403
@@ -16,4 +17,5 @@ const (
 	ServiceUnavailable  = 503
 	ServiceBroken       = 502
 	WrongCredential     = 1001
+	TooManyRequest      = 429
 )

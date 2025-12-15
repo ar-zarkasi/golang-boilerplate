@@ -27,6 +27,7 @@ import (
 	"app/src/router"
 	"log"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -59,9 +60,11 @@ func main() {
 		host = "localhost:" + port
 	}
 
-	docs.SwaggerInfo.Host = host
+	swaggerHost := strings.TrimPrefix(strings.TrimPrefix(host, "http://"), "https://")
+	docs.SwaggerInfo.Host = swaggerHost
+
 	log.Printf("Server running on 0.0.0.0:%s", port)
-	log.Printf("Accessible at: http://%s", host)
+	log.Printf("Accessible at: %s", host)
 
 	// Bind to 0.0.0.0 to accept connections from outside the container
 	err := mainRouter.Run("0.0.0.0:" + port)

@@ -22,6 +22,14 @@ func (m *MockHelperInterface) IsProduction() bool {
 	return args.Bool(0)
 }
 
+func (m *MockHelperInterface) SetBaseUrl(url string) {
+	m.Called(url)
+}
+func (m *MockHelperInterface) GetBaseUrl() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 func (m *MockHelperInterface) MakeRequest(method string, url string, params any) ([]byte, error) {
 	args := m.Called(method, url, params)
 	if args.Get(0) == nil {
@@ -95,6 +103,11 @@ func (m *MockHelperInterface) GetCache(key string) (*string, error) {
 
 func (m *MockHelperInterface) DeleteCache(key string) error {
 	args := m.Called(key)
+	return args.Error(0)
+}
+
+func (m *MockHelperInterface) DeleteCachePattern(pattern string) error {
+	args := m.Called(pattern)
 	return args.Error(0)
 }
 
@@ -306,4 +319,24 @@ func (m *MockHelperInterface) SetupLogging() {
 func (m *MockHelperInterface) ContainString(s, substr string) bool {
 	args := m.Called(s, substr)
 	return args.Bool(0)
+}
+
+func (m *MockHelperInterface) ConvertStringToInt64(s string) int64 {
+	args := m.Called(s)
+	return args.Get(0).(int64)
+}
+
+func (m *MockHelperInterface) Slugify(text string) string {
+	args := m.Called(text)
+	return args.String(0)
+}
+
+func (m *MockHelperInterface) ConvertInt64ToString(i int64) string {
+	args := m.Called(i)
+	return args.String(0)
+}
+
+func (m *MockHelperInterface) ValidateSafeHTML(value string) error {
+	args := m.Called(value)
+	return args.Error(0)
 }

@@ -20,6 +20,7 @@ type S3Provider string
 const (
 	S3ProviderAWS   S3Provider = "aws"
 	S3ProviderMinio S3Provider = "minio"
+	S3ProviderLocal S3Provider = "local"
 )
 
 type MainConfig struct {
@@ -56,6 +57,7 @@ type MainConfig struct {
 	} `toml:"redis"`
 	Cors struct {
 		AllowedUrl string `toml:"allowed_url"`
+		RateLimit  int    `toml:"rate_limit"`
 	} `toml:"cors"`
 	Database struct {
 		Type     DBType `toml:"type"`

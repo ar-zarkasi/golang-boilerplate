@@ -21,8 +21,9 @@ func NewDependenciesApp(helper helpers.HelperInterface) *DependenciesApp {
 
 // register controllers and middleware variable name here (CamelCase)
 var (
-	AuthController  *controllers.AuthController
-	LoginMiddleware *middlewares.AuthenticationMiddleware
+	AuthController         *controllers.AuthController
+	LoginMiddleware        *middlewares.AuthenticationMiddleware
+	LoginOutsideMiddleware *middlewares.AuthenticationOutMiddleware
 )
 
 func (d *DependenciesApp) RegisterControllers() {
@@ -33,4 +34,5 @@ func (d *DependenciesApp) RegisterControllers() {
 func (d *DependenciesApp) RegisterMiddlewares() {
 	// Register your middlewares here
 	LoginMiddleware = middlewares.NewAuthMiddleware(d.Helper, d.AuthService)
+	LoginOutsideMiddleware = middlewares.NewAuthOutMiddleware(d.Helper, d.AuthService)
 }

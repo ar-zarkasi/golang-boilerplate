@@ -19,7 +19,7 @@ type User struct {
 	LastLoginAt     *time.Time `gorm:"null"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-	DeletedAt       gorm.DeletedAt `gorm:"index"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" swaggerignore:"true"`
 
 	// Relationships
 	Profile   *UserProfile  `gorm:"foreignKey:UserID"`

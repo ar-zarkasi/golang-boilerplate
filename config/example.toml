@@ -41,6 +41,7 @@ db_pub_sub = 1       # Database for pub/sub operations
 # CORS Configuration
 [cors]
 allowed_url = "*"    # Use "*" for all origins or specify comma-separated URLs
+rate_limit = 10
 
 # Database Configuration
 [database]
@@ -61,7 +62,7 @@ db_name = "myapp_db"
 
 # S3 Storage Configuration
 [s3]
-provider = "aws"              # Options: "aws" or "minio"
+provider = "aws"              # Options: "aws", "local" or "minio"
 endpoint = ""                 # Leave empty for AWS S3, use "localhost:9000" for local Minio
 region = "us-east-1"         # AWS region or Minio region (can be any value for Minio)
 access_key_id = "your-access-key-id"

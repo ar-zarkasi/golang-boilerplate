@@ -12,6 +12,8 @@ import (
 
 type HelperInterface interface {
 	IsProduction() bool
+	SetBaseUrl(url string)
+	GetBaseUrl() string
 	MakeRequest(method string, url string, params any) ([]byte, error)
 	GetLastHeaderResponse() *http.Header
 	GetLastStatusCode() int
@@ -23,6 +25,7 @@ type HelperInterface interface {
 	SetCache(key string, value any, ttl int) error
 	GetCache(key string) (*string, error)
 	DeleteCache(key string) error
+	DeleteCachePattern(pattern string) error
 	LoadConfig(conf any) error
 	FindProjectRoot() (string, error)
 	GetDefaultLimitData() int
@@ -63,6 +66,10 @@ type HelperInterface interface {
 	FormatValidationError(err error) string
 	SetupLogging()
 	ContainString(s, substr string) bool
+	ConvertStringToInt64(s string) int64
+	Slugify(text string) string
+	ConvertInt64ToString(i int64) string
+	ValidateSafeHTML(value string) error
 }
 
 type Helpers struct {

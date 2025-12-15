@@ -13,7 +13,7 @@ type UserSessionRepository interface {
 	GetByID(ID string) (*models.UserSession, error)
 	GetByToken(token string) (models.UserSession, error)
 	GetByRefreshToken(refreshToken string) (models.UserSession, error)
-	GetByUserID(userID string) (*models.UserSession, error)
+	GetByUserID(userID string) ([]models.UserSession, error)
 	DeleteByToken(token string) error
 	DeleteExpired() error
 	DeleteUserSessions(userID string) error
@@ -68,12 +68,12 @@ func (r *userSessionRepository) GetByID(ID string) (*models.UserSession, error) 
 	return &session, nil
 }
 
-func (r *userSessionRepository) GetByUserID(userID string) (*models.UserSession, error) {
-	var session models.UserSession
-	if err := r.BaseQuery().Where("user_id = ? AND expires_at > CURRENT_TIMESTAMP", userID).Order("updated_at DESC").First(&session).Error; err != nil {
+func (r *userSessionRepository) GetByUserID(userID string) ([]models.UserSession, error) {
+	var session []models.UserSession
+	if err := r.BaseQuery().Where("user_id = ? AND expires_at > CURRENT_TIMESTAMP", userID).Order("updated_at DESC").Find(&session).Error; err != nil {
 		return nil, err
 	}
-	return &session, nil
+	return session, nil
 }
 
 func (r *userSessionRepository) DeleteByToken(token string) error {

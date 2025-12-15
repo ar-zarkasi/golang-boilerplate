@@ -69,13 +69,16 @@ func (c *AuthController) SignIn(ctx *gin.Context) {
 // @Failure      500 {object} types.ResponseDefault{status=bool,code=int,data=object,message=string} "Internal server error"
 // @Router       /auth/register [post]
 func (c *AuthController) SignUp(ctx *gin.Context) {
-	var userRequest types.RegisterUserRequest
+	var (
+		userRequest types.RegisterUserRequest
+		newUser     models.User
+	)
 	if err := ctx.ShouldBindJSON(&userRequest); err != nil {
 		c.helper.ErrorResponse(ctx, constants.ValidationError, c.helper.FormatValidationError(err))
 		return
 	}
 
-	user, code, err := c.authService.RegisterUser(userRequest)
+	code, err := c.authService.AddUser(userRequest, &newUser, nil)
 	if err != nil {
 		c.helper.ErrorResponse(ctx, code, err.Error())
 		return
@@ -84,7 +87,7 @@ func (c *AuthController) SignUp(ctx *gin.Context) {
 	response := types.ResponseDefault{
 		Status:  true,
 		Code:    code,
-		Data:    map[string]string{"user_id": user.ID},
+		Data:    map[string]string{"user_id": newUser.ID},
 		Message: "User registered successfully",
 	}
 	c.helper.SendResponse(ctx, response)
