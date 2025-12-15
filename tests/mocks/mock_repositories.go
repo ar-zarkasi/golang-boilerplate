@@ -110,8 +110,8 @@ func (m *MockUserSessionRepository) Update(id string, session *models.UserSessio
 	return args.Error(0)
 }
 
-func (m *MockUserSessionRepository) Delete(id string) error {
-	args := m.Called(id)
+func (m *MockUserSessionRepository) Delete(id string, session models.UserSession) error {
+	args := m.Called(id, session)
 	return args.Error(0)
 }
 
@@ -141,12 +141,12 @@ func (m *MockUserSessionRepository) GetByRefreshToken(refreshToken string) (mode
 	return args.Get(0).(models.UserSession), args.Error(1)
 }
 
-func (m *MockUserSessionRepository) GetByUserID(userID string) (*models.UserSession, error) {
+func (m *MockUserSessionRepository) GetByUserID(userID string) ([]models.UserSession, error) {
 	args := m.Called(userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.UserSession), args.Error(1)
+	return args.Get(0).([]models.UserSession), args.Error(1)
 }
 
 func (m *MockUserSessionRepository) DeleteByToken(token string) error {
