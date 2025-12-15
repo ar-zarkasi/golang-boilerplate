@@ -16,7 +16,6 @@ import (
 
 type AuthorizationsService interface {
 	Authorize(Username string, Password string) (*types.UserAuth, int, error)
-	RegisterUser(userRequest types.RegisterUserRequest) (models.User, int, error)
 	Login(user models.User, loginUser *types.UserAuth) error
 	ListRoles(req types.PagingCursor, user models.User) ([]types.ListDataRoles, error)
 	VerifyToken(token string, sesId *string) (*models.User, error)
@@ -24,6 +23,10 @@ type AuthorizationsService interface {
 	RevokeAuthorization(token string) error
 	CreateAdminUser(email string, password string) (models.User, int, error)
 	AppHasAdministrator() bool
+	ChangePassword(User models.User, req types.ChangePasswordRequest) (int, error)
+	AssignRole(RoleId string, UserId string, by *string) (int, error)
+	VerifyTokenOutApp(token string, sesID *string) (*models.User, error)
+	AddUser(req types.RegisterUserRequest, user *models.User, userRegist *string) (int, error)
 }
 
 type authorizationsService struct {
@@ -45,87 +48,6 @@ func NewAuthorizationService(hl helpers.HelperInterface) AuthorizationsService {
 		roleRepository:        repository.NewRoleRepository(db),
 		userRoleRepository:    repository.NewUserRoleRepository(db),
 	}
-}
-
-func (s *authorizationsService) RegisterUser(userRequest types.RegisterUserRequest) (models.User, int, error) {
-	var (
-		userNew     models.User
-		userProfile models.UserProfile
-		userRole    models.UserRole
-	)
-	if userRequest.Username != nil {
-		checkUsername, err := s.userRepository.GetByUsername(*userRequest.Username)
-		if err == nil && checkUsername.ID != "" {
-			return userNew, constants.ValidationError, fmt.Errorf("username %s already registered", *userRequest.Username)
-		}
-		userNew.Username = *userRequest.Username
-	}
-
-	if userRequest.Email != "" {
-		userRequest.Email = strings.ToLower(userRequest.Email)
-		checkEmail, err := s.userRepository.GetByEmail(userRequest.Email)
-		if err == nil && checkEmail.ID != "" {
-			return userNew, constants.ValidationError, fmt.Errorf("email %s already registered", userRequest.Email)
-		}
-		userNew.Email = userRequest.Email
-		if userNew.Username == "" {
-			userNew.Username = strings.Split(userRequest.Email, "@")[0] // use email prefix as username if not provided
-		}
-	} else if userRequest.Phone != "" {
-		userRequest.Phone = s.Helper.NormalizePhone(userRequest.Phone)
-		checkPhone, err := s.userRepository.GetByPhone(userRequest.Phone)
-		if err == nil && checkPhone.ID != "" {
-			return userNew, constants.ValidationError, fmt.Errorf("phone %s already registered", userRequest.Phone)
-		}
-		if userNew.Username == "" {
-			userNew.Username = userRequest.Phone // use phone as username if not provided
-		}
-	}
-
-	PasswordHash, err := s.Helper.HashPassword(userRequest.Password)
-	if err != nil {
-		return userNew, constants.InternalServerError, fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	tx := s.Helper.GetDatabase().DB().Begin()
-
-	userNew.PasswordHash = PasswordHash
-	userNew.IsActive = true
-	userNew.EmailVerified = false
-	err = s.userRepository.Create(&userNew)
-	if err != nil {
-		tx.Rollback()
-		return models.User{}, constants.InternalServerError, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	userProfile.UserID = userNew.ID
-	userProfile.FirstName = strings.Split(userRequest.FullName, " ")[0]
-	userProfile.LastName = strings.Join(strings.Split(userRequest.FullName, " ")[1:], " ")
-	userProfile.Timezone = s.Helper.DefaultValue(userRequest.Timezone, constants.DEFAULT_TIMEZONE)
-	userProfile.Language = s.Helper.DefaultValue(userRequest.Language, constants.DEFAULT_LOCALE)
-	err = s.userProfileRepository.Create(&userProfile)
-	if err != nil {
-		tx.Rollback()
-		return models.User{}, constants.InternalServerError, fmt.Errorf("failed to create user profile: %w", err)
-	}
-
-	// set default role to user
-	defaultRole, err := s.getSpecificRole("user")
-	if err != nil {
-		return models.User{}, constants.InternalServerError, fmt.Errorf("failed to get default role: %w", err)
-	}
-	userRole.UserID = userNew.ID
-	userRole.RoleID = defaultRole.ID
-	userRole.AssignedAt = time.Now()
-	err = s.userRoleRepository.AssignRole(userRole)
-	if err != nil {
-		tx.Rollback()
-		return models.User{}, constants.InternalServerError, fmt.Errorf("failed to assign role to user: %w", err)
-	}
-
-	log.Printf("User %s registered successfully with ID %s", userNew.Username, userNew.ID)
-	tx.Commit()
-	return userNew, constants.SuccessCreate, nil
 }
 
 func (s *authorizationsService) Login(user models.User, loginUser *types.UserAuth) error {
@@ -208,20 +130,25 @@ func (s *authorizationsService) Authorize(Username string, Password string) (*ty
 	}
 
 	if err != nil {
-		return nil, constants.WrongCredential, err
+		return nil, constants.ValidationError, err
 	}
 
 	verifYPassword := s.Helper.VerifyPassword(user.PasswordHash, Password)
 	if !verifYPassword {
-		return nil, constants.WrongCredential, errors.New("invalid credentials")
+		return nil, constants.ValidationError, errors.New("invalid credentials")
 	}
 
 	alreadyLogin, _ := s.userSessionRepository.GetByUserID(user.ID)
-	if alreadyLogin != nil {
-		cacheKey := constants.PREFIX_CACHE_LOGIN_USER + alreadyLogin.ID
+	loginSession := models.UserSession{}
+	for _, session := range alreadyLogin {
+		loginSession = session
+		break
+	}
+	if loginSession.ID != "" {
+		cacheKey := constants.PREFIX_CACHE_LOGIN_USER + loginSession.ID
 		data, err := s.Helper.GetCache(cacheKey)
 		if err != nil {
-			return nil, constants.InternalServerError, fmt.Errorf("failed to get cached session: %w", err)
+			log.Printf("failed to get cached session: %s", err)
 		}
 		if data != nil {
 			var cachedSession types.CacheAuth
@@ -243,11 +170,15 @@ func (s *authorizationsService) Authorize(Username string, Password string) (*ty
 			loginUser.Scope = &map[string]any{}
 			return &loginUser, constants.Success, nil
 		}
-
-		return nil, constants.BadRequest, fmt.Errorf("user %s is already logged in", user.Username)
+		// remove old session
+		s.RevokeAuthorization(loginSession.ID)
 	}
 
 	err = s.Login(user, &loginUser)
+	if err != nil {
+		log.Println(err)
+		return nil, constants.InternalServerError, fmt.Errorf("failed to login user: %w", err)
+	}
 
 	return &loginUser, constants.Success, err
 }
@@ -375,7 +306,7 @@ func (s *authorizationsService) RevokeAuthorization(sessionID string) error {
 	refreshToken := session.RefreshToken
 	_ = s.Helper.DeleteCache(refreshToken)
 
-	err = s.userSessionRepository.Delete(session.ID)
+	err = s.userSessionRepository.Delete(session.ID, session)
 	if err != nil {
 		log.Printf("Failed to delete session: %v", err)
 		return fmt.Errorf("failed to delete session: %w", err)
@@ -528,4 +459,190 @@ func (s *authorizationsService) AppHasAdministrator() bool {
 
 	hit := s.userRepository.CountRoleActiveUsers(adminRole.ID)
 	return hit > 0
+}
+
+func (s *authorizationsService) ChangePassword(User models.User, req types.ChangePasswordRequest) (int, error) {
+	log.Printf("the Has Password is %s \n", User.ID)
+	if !s.Helper.VerifyPassword(User.PasswordHash, req.CurrentPassword) {
+		return constants.ValidationError, errors.New("wrong current password")
+	}
+	newPasswordHash, err := s.Helper.HashPassword(req.NewPassword)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	tx := s.Helper.GetDatabase().DB().Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			log.Printf("Recovered from panic: %v", r)
+		}
+	}()
+
+	User.PasswordHash = newPasswordHash
+	err = s.userRepository.Update(User.ID, &User)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("failed to update user password: %w", err)
+	}
+
+	allSessionLogged, err := s.userSessionRepository.GetByUserID(User.ID)
+	if err != nil {
+		log.Printf("Failed to get user sessions: %v", err)
+		return constants.InternalServerError, fmt.Errorf("failed to get user sessions: %w", err)
+	}
+	for _, session := range allSessionLogged {
+		s.RevokeAuthorization(session.ID)
+	}
+
+	tx.Commit()
+	return constants.Success, nil
+}
+
+func (s *authorizationsService) AssignRole(RoleId string, UserId string, by *string) (int, error) {
+	check, _ := s.userRoleRepository.CheckUserRole(UserId, RoleId)
+	if check {
+		return constants.ValidationError, fmt.Errorf("user already using that role")
+	}
+
+	role, err := s.roleRepository.GetByID(RoleId)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("failed to get role by ID: %w", err)
+	}
+
+	user, err := s.userRepository.GetByID(UserId)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("failed to get user by ID: %w", err)
+	}
+
+	userRole := models.UserRole{
+		UserID:     user.ID,
+		RoleID:     role.ID,
+		AssignedAt: time.Now(),
+		AssignedBy: by,
+	}
+
+	err = s.userRoleRepository.AssignRole(userRole)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("failed to assign role to user: %w", err)
+	}
+
+	log.Printf("User %s has been assigned role %s successfully", user.Username, role.Name)
+	return constants.Success, nil
+}
+
+// Use as middleware outside auth app
+func (s *authorizationsService) VerifyTokenOutApp(token string, sesID *string) (*models.User, error) {
+	var (
+		user models.User
+	)
+
+	splitToken := strings.Split(token, ".")
+	if len(splitToken) != 3 {
+		msg := "invalid token format"
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+
+	payload := map[string]any{}
+	err := s.Helper.ParsingJWT(token, &payload)
+	if err != nil {
+		log.Println(err)
+		return nil, fmt.Errorf("failed to parse token: %w", err)
+	}
+
+	if payload["sessionID"] == nil {
+		log.Println("Session ID not found on token")
+		return nil, errors.New("not authorized")
+	}
+
+	sessionIDEncrypted := payload["sessionID"].(string)
+
+	sessionID, err := s.Helper.Decrypt(sessionIDEncrypted, nil)
+	if err != nil {
+		log.Println(err)
+		return nil, fmt.Errorf("failed to decrypt session ID: %w", err)
+	}
+
+	sessionIDString := string(sessionID)
+	*sesID = sessionIDString
+	keyCache := constants.PREFIX_CACHE_LOGIN_USER + *sesID
+	cachedData, err := s.Helper.GetCache(keyCache)
+	if err == nil {
+		var cachedSession types.CacheAuth
+		err = s.Helper.JSONToStruct([]byte(*cachedData), &cachedSession)
+		if err != nil {
+			log.Println(err)
+			return nil, fmt.Errorf("failed to parse cached session data: %w", err)
+		}
+		session := models.UserSession{}
+		err = s.Helper.InterfaceToStruct(cachedSession.Session, &session)
+		if err != nil {
+			log.Println(err)
+			return nil, fmt.Errorf("failed to parse cached session data: %w", err)
+		}
+		user = session.User
+		return &user, nil
+	}
+	log.Println(err, cachedData)
+	return nil, errors.New("not authorized")
+
+}
+
+func (s *authorizationsService) AddUser(req types.RegisterUserRequest, user *models.User, userRegist *string) (int, error) {
+	PasswordHash, err := s.Helper.HashPassword(req.Password)
+	if err != nil {
+		log.Println(err)
+		return constants.InternalServerError, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	tx := s.Helper.GetDatabase().DB().Begin()
+
+	usern := req.Email
+	if req.Username != nil {
+		usern = *req.Username
+	}
+	user.Username = usern
+	user.Email = req.Email
+	user.Phone = req.Phone
+	user.PasswordHash = PasswordHash
+	user.IsActive = true
+	user.EmailVerified = true
+	err = s.userRepository.Create(user)
+	if err != nil {
+		tx.Rollback()
+		return constants.InternalServerError, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	userProfile := models.UserProfile{}
+	userProfile.UserID = user.ID
+	userProfile.FirstName = strings.Split(req.FullName, " ")[0]
+	userProfile.LastName = strings.Join(strings.Split(req.FullName, " ")[1:], " ")
+	userProfile.Timezone = s.Helper.DefaultValue(req.Timezone, "Asia/Jakarta")
+	userProfile.Language = s.Helper.DefaultValue(req.Language, "en")
+	err = s.userProfileRepository.Create(&userProfile)
+	if err != nil {
+		tx.Rollback()
+		return constants.InternalServerError, fmt.Errorf("failed to create user profile: %w", err)
+	}
+	user.Profile = &userProfile
+
+	// set default role to user
+	defaultRole, err := s.roleRepository.GetByName(constants.DEFAULT_USER_ROLE)
+	if err != nil {
+		return constants.InternalServerError, fmt.Errorf("role user not exists")
+	}
+	userRole := models.UserRole{}
+	userRole.UserID = user.ID
+	userRole.RoleID = defaultRole.ID
+	userRole.AssignedAt = time.Now()
+	userRole.AssignedBy = userRegist
+	err = s.userRoleRepository.AssignRole(userRole)
+	if err != nil {
+		tx.Rollback()
+		return constants.InternalServerError, fmt.Errorf("failed to assign role to user: %w", err)
+	}
+
+	log.Printf("User admin %s registered successfully with ID %s", user.Username, user.ID)
+	tx.Commit()
+	return constants.SuccessCreate, nil
 }

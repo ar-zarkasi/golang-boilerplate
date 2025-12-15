@@ -2,6 +2,7 @@ package repository
 
 import (
 	"app/src/types"
+	"log"
 	"strings"
 
 	"gorm.io/gorm"
@@ -11,8 +12,9 @@ type BaseRepository[T any] interface {
 	BaseQuery() *gorm.DB
 	Create(item *T) error
 	Update(id string, item *T) error
-	Delete(id string) error
+	Delete(id any, item *T) error
 	GetListsCursor(filter []types.FilterQuery, lastValue string, lastColumn string, sort types.SORTING, limit int) ([]T, error)
+	CountFromCursor(filter []types.FilterQuery, lastValue string, lastColumn string, sort types.SORTING) int64
 }
 
 type baseRepository[T any] struct {
@@ -44,8 +46,8 @@ func (r *baseRepository[T]) Update(id string, item *T) error {
 	return r.db.Save(&item).Error
 }
 
-func (r *baseRepository[T]) Delete(id string) error {
-	return r.db.Delete(r.model, "id = ?", id).Error
+func (r *baseRepository[T]) Delete(id any, item *T) error {
+	return r.db.Delete(&item, "id = ?", id).Error
 }
 
 func (r *baseRepository[T]) GetListsCursor(filter []types.FilterQuery, lastValue string, lastColumn string, sort types.SORTING, limit int) ([]T, error) {
@@ -96,4 +98,57 @@ func (r *baseRepository[T]) GetListsCursor(filter []types.FilterQuery, lastValue
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *baseRepository[T]) CountFromCursor(filter []types.FilterQuery, lastValue string, lastColumn string, sort types.SORTING) int64 {
+	var count int64
+	query := r.BaseQuery()
+
+	if len(filter) > 0 {
+		for _, f := range filter {
+			operandSmall := strings.ToLower(f.Operand)
+			if len(f.ValueArray) > 0 {
+				query = query.Where(f.Column+" IN ?", f.ValueArray)
+			} else if operandSmall == "is_null" {
+				query = query.Where(f.Column + " IS NULL")
+			} else if operandSmall == "is_not_null" {
+				query = query.Where(f.Column + " IS NOT NULL")
+			} else if operandSmall == "in" {
+				query = query.Where(f.Column+" IN ?", f.ValueArray)
+			} else if operandSmall == "not_in" {
+				query = query.Where(f.Column+" NOT IN ?", f.ValueArray)
+			} else if operandSmall == "like" {
+				query = query.Where(f.Column+" LIKE ?", "%"+*f.Value+"%")
+			} else if operandSmall == "not_like" {
+				query = query.Where(f.Column+" NOT LIKE ?", "%"+*f.Value+"%")
+			} else if operandSmall == "between" && len(f.ValueArray) == 2 {
+				query = query.Where(f.Column+" BETWEEN ? AND ?", f.ValueArray[0], f.ValueArray[1])
+			} else if operandSmall == "not_between" && len(f.ValueArray) == 2 {
+				query = query.Where(f.Column+" NOT BETWEEN ? AND ?", f.ValueArray[0], f.ValueArray[1])
+			} else {
+				query = query.Where(f.Column+" "+f.Operand+" ?", *f.Value)
+			}
+		}
+	}
+
+	if lastValue != "" && lastColumn != "" {
+		if sort == types.SORTING_ASC {
+			query = query.Where(lastColumn+" > ?", lastValue)
+		} else {
+			query = query.Where(lastColumn+" < ?", lastValue)
+		}
+	}
+	if sort == types.SORTING_ASC {
+		query = query.Order(lastColumn + " ASC")
+	} else {
+		query = query.Order(lastColumn + " DESC")
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		log.Println(err)
+		count = 0
+	}
+
+	return count
 }

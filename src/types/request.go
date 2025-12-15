@@ -23,6 +23,12 @@ type RegisterAdministratorRequest struct {
 	ConfirmPassword string `json:"confirm_password" binding:"required,eqfield=Password"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required,min=6,max=50"`
+	NewPassword     string `json:"new_password" binding:"required,min=6,max=50"`
+	ConfirmPassword string `json:"confirm_password" binding:"required,eqfield=NewPassword"`
+}
+
 type PagingCursor struct {
 	LastValue   string        `json:"last_value"`
 	Limit       int           `json:"limit"`

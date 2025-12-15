@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -51,6 +53,9 @@ func (h *Helpers) IsProduction() bool {
 }
 func (h *Helpers) SetBaseUrl(url string) {
 	baseURL = url
+}
+func (h *Helpers) GetBaseUrl() string {
+	return baseURL
 }
 func (h *Helpers) MakeRequest(method string, url string, params any) ([]byte, error) {
 	client := &http.Client{}
@@ -270,6 +275,9 @@ func (h *Helpers) GetCache(key string) (*string, error) {
 func (h *Helpers) DeleteCache(key string) error {
 	return redisClient.Clear(key)
 }
+func (h *Helpers) DeleteCachePattern(pattern string) error {
+	return redisClient.ClearPattern(pattern)
+}
 func (h *Helpers) LoadConfig(conf any) error {
 	if conf == nil {
 		return fmt.Errorf("config parameter must not be nil")
@@ -360,6 +368,7 @@ func (h *Helpers) ErrorMessage(code int) string {
 		constants.GatewayTimeout:      "Gateway Timeout",
 		constants.ServiceBroken:       "Service Not Completed",
 		constants.WrongCredential:     "Username or Password is incorrect",
+		constants.TooManyRequest:      "Too Many Request",
 	}
 	return errorMessages[code]
 }
@@ -608,6 +617,8 @@ func (h *Helpers) ReadJSONFile(filePath string, target interface{}) error {
 	return json.Unmarshal(data, target)
 }
 func (h *Helpers) HashPassword(password string) (string, error) {
+	// Use cost 12 for good security with reasonable performance
+	// bcrypt.DefaultCost = 10, MaxCost = 31 (extremely slow!)
 	const cost = 12
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return string(hashed), err
@@ -852,5 +863,140 @@ func (h *Helpers) ContainString(s, substr string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func (h *Helpers) ConvertStringToInt64(s string) int64 {
+	var result int64
+	fmt.Sscanf(s, "%d", &result)
+	return result
+}
+
+func (h *Helpers) Slugify(text string) string {
+	// Convert to lowercase
+	slug := strings.ToLower(text)
+
+	// Replace spaces and special characters with hyphens
+	slug = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		if r == ' ' || r == '-' || r == '_' {
+			return '-'
+		}
+		return -1
+	}, slug)
+
+	// Remove multiple consecutive hyphens
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+
+	// Trim hyphens from start and end
+	slug = strings.Trim(slug, "-")
+
+	return slug
+}
+
+func (h *Helpers) ConvertInt64ToString(i int64) string {
+	s := strconv.FormatInt(i, 10)
+	return s
+}
+
+// ValidateSafeHTML validates HTML content from WYSIWYG editors
+// Only allows safe formatting tags and attributes, blocks XSS vectors
+func (h *Helpers) ValidateSafeHTML(value string) error {
+	if value == "" {
+		return nil
+	}
+
+	// Allowed "text formatting" tags
+	allowedTags := map[string]bool{
+		"b": true, "strong": true, "i": true, "em": true, "u": true,
+		"s": true, "mark": true, "small": true, "sub": true, "sup": true,
+		"span": true, "br": true, "p": true, "ul": true, "ol": true,
+		"li": true, "h1": true, "h2": true, "h3": true, "h4": true,
+		"h5": true, "h6": true,
+	}
+
+	// Allowed attributes
+	allowedAttributes := map[string]bool{
+		"style": true,
+		"class": true,
+	}
+
+	// Parse HTML
+	doc, err := html.Parse(strings.NewReader(value))
+	if err != nil {
+		return fmt.Errorf("mengandung karakter yang tidak diperbolehkan")
+	}
+
+	// Traverse the HTML tree and validate
+	var validateNode func(*html.Node) error
+	validateNode = func(n *html.Node) error {
+		if n.Type == html.ElementNode {
+			tag := strings.ToLower(n.Data)
+
+			// 1. Tag must be in the allowed list
+			if !allowedTags[tag] {
+				return fmt.Errorf("contain not allowed tag <%s>", tag)
+			}
+
+			// 2. Validate attributes
+			for _, attr := range n.Attr {
+				name := strings.ToLower(attr.Key)
+				value := attr.Val
+
+				// 2.a Block event attributes: onclick, onload, onmouseover, etc.
+				if strings.HasPrefix(name, "on") {
+					return fmt.Errorf("contain restricted event (%s)", name)
+				}
+
+				// 2.b Attribute must be in the allowed list
+				if !allowedAttributes[name] {
+					return fmt.Errorf("containt not allowed attribute %s", name)
+				}
+
+				// 2.c Extra check for dangerous CSS in style=""
+				if name == "style" {
+					if h.styleIsUnsafe(value) {
+						return fmt.Errorf("contain unsafe script")
+					}
+				}
+			}
+		}
+
+		// Recursively validate child nodes
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			if err := validateNode(child); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	return validateNode(doc)
+}
+
+// styleIsUnsafe checks for dangerous CSS that could enable script execution
+func (h *Helpers) styleIsUnsafe(style string) bool {
+	styleLower := strings.ToLower(style)
+
+	// Block common XSS vectors in CSS
+	dangerousPatterns := []string{
+		"expression(",
+		"javascript:",
+		"vbscript:",
+		"data:",
+		"-moz-binding",
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(styleLower, pattern) {
+			return true
+		}
+	}
+
 	return false
 }

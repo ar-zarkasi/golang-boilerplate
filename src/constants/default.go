@@ -5,3 +5,5 @@ const DEFAULT_ADMIN_ROLE = "admin"
 const DEFAULT_TIMEZONE = "Asia/Jakarta"
 const DEFAULT_LOCALE = "en-US"
 const MIN_PASSWORD_LENGTH = 8
+const DEFAULT_PERMISSION = 0755
+const DEFAULT_PATH_UPLOAD = "./uploads"

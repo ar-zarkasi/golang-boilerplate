@@ -1,6 +1,7 @@
 package router
 
 import (
+	"app/src/constants"
 	"app/src/helpers"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 func SetupRoutes(helper helpers.HelperInterface) *gin.Engine {
@@ -22,21 +24,7 @@ func SetupRoutes(helper helpers.HelperInterface) *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
-	if helper.IsProduction() {
-		configCors.AllowOrigins = strings.Split(config.Cors.AllowedUrl, ",")
-	} else {
-		// In development, allow common localhost ports for Podman/Docker
-		configCors.AllowOrigins = []string{
-			"http://localhost",
-			"http://localhost:7007",
-			"http://localhost:5000",
-			"http://localhost:3000",
-			"http://127.0.0.1",
-			"http://127.0.0.1:7007",
-			"http://127.0.0.1:5000",
-			"http://127.0.0.1:3000",
-		}
-	}
+	configCors.AllowOrigins = strings.Split(config.Cors.AllowedUrl, ",")
 
 	routers.Use(cors.New(configCors))
 
@@ -44,6 +32,20 @@ func SetupRoutes(helper helpers.HelperInterface) *gin.Engine {
 	routers.Use(func(c *gin.Context) {
 		// Set a reasonable read timeout for the request body
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10*1024*1024) // 10MB max
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(constants.SuccessNoContent)
+			return
+		}
+		c.Next()
+	})
+	//  adjust rate limiter
+	routers.Use(func(c *gin.Context) {
+		limiter := rate.NewLimiter(1, config.Cors.RateLimit)
+		if !limiter.Allow() {
+			helper.ErrorResponse(c, constants.TooManyRequest, "Too Many Request")
+			return
+		}
+
 		c.Next()
 	})
 
